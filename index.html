@@ -1531,6 +1531,7 @@ function buildDorm() {
   const fixBox = (b) => {
     const cut = lvl2(b.y0, b.n) ? C2 : C1;
     if (b.n === '中庭_草地' && b.x1 > -13.5) { b.x1 += XS; return; }
+    if (b.n === '中庭_冷氣室外機' && b.x1 > C1) { b.x0 += XS; b.x1 += XS; return; } // 掛在寢室外牆上的冷氣室外機：整台跟著牆移，不要被拉長
     if (b.x0 >= cut) { b.x0 += XS; b.x1 += XS; }
     else if (b.x1 > cut + 0.001) { if (b.n.includes('窗')) { b.x0 += XS; b.x1 += XS; } else b.x1 += XS; }
   };

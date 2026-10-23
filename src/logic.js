@@ -423,16 +423,16 @@ export class Nav {
 }
 
 // ===== 場景資訊：書桌 / 床 / 房門 / 巡邏點 =====
-export function buildLayout(world, nav, extraSpots = [], extraPatrol = []) {
+export function buildLayout(world, nav, extraSpots = [], extraPatrol = [], xs = 0) { // xs：宿舍走廊中心線的 x（用來判斷東西側）
   const desks = [], beds = [], doors = [];
   for (const b of world.raw) {
     const room = (b.n.match(/^(二樓_\d{3}房)/) || [])[1];
     if (b.n.includes('書桌') && !b.n.includes('抽屜') && room) {
       desks.push({ room, x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, top: b.y1, floor: b.y1 - 0.8, name: b.n });
     } else if (b.n.includes('床墊') && room) {
-      beds.push({ room, name: b.n, x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, cx: (b.x0 + b.x1) / 2, cz: (b.z0 + b.z1) / 2, top: b.y1, floor: 3.4, side: (b.x0 + b.x1) > 0 ? 1 : -1 });
+      beds.push({ room, name: b.n, x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, cx: (b.x0 + b.x1) / 2, cz: (b.z0 + b.z1) / 2, top: b.y1, floor: 3.4, side: (b.x0 + b.x1) / 2 > xs ? 1 : -1 });
     } else if (b.n.includes('門框上緣') && room) {
-      doors.push({ room, x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, side: (b.x0 + b.x1) > 0 ? 1 : -1 });
+      doors.push({ room, x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, side: (b.x0 + b.x1) / 2 > xs ? 1 : -1 });
     }
   }
   const nearNodeDist = (x, z, y, maxD) => { // 附近是否有可到達節點

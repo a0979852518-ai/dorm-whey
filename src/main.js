@@ -16,7 +16,7 @@
   const raw = DORM.solid;
   const world = new World(raw); world.extra = DORM.extra;
   const nav = new Nav(world, DORM.spawn);
-  const L = buildLayout(world, nav, DORM.spots, DORM.patrol);
+  const L = buildLayout(world, nav, DORM.spots, DORM.patrol, DORM.XS);
   const LNG = { tv: DORM.tv, remote: DORM.remote };
   const roomNo = (r) => { const m = r.match(/二樓_(\d{3})房/); return m ? Number(m[1]) : 0; };
   const roomLabel = (r) => { const n = roomNo(r); return n ? `${n} 號房` : r; };
@@ -91,7 +91,7 @@
       g.fillStyle = '#d9d3c3'; g.fillRect(0, 0, 256, 112); g.fillStyle = '#26303a'; g.fillRect(8, 8, 240, 96);
       g.fillStyle = '#e8e2cf'; g.font = '700 64px "IBM Plex Mono", "Noto Sans TC", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(no), 128, 60);
       const tx = new THREE.CanvasTexture(c); tx.encoding = THREE.sRGBEncoding; const m = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.16), new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, map: tx }));
-      const right = b.x0 > 0; m.position.set(right ? b.x0 - 0.015 : b.x1 + 0.015, b.y1 + 0.13, (b.z0 + b.z1) / 2); m.rotation.y = right ? -Math.PI / 2 : Math.PI / 2; scene.add(m);
+      const right = (b.x0 + b.x1) / 2 > DORM.XS; m.position.set(right ? b.x0 - 0.015 : b.x1 + 0.015, b.y1 + 0.13, (b.z0 + b.z1) / 2); m.rotation.y = right ? -Math.PI / 2 : Math.PI / 2; scene.add(m);
     }
     // 隔間門／浴簾（躲藏時才關上）
     for (const sp of L.usableBeds) if (sp.door) { const a = []; pushBox(a, sp.door); const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(a, 3)); geo.computeVertexNormals(); sp.doorMesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, color: sp.door.c, side: THREE.DoubleSide })); sp.doorMesh.visible = false; scene.add(sp.doorMesh); }

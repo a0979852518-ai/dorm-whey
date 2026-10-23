@@ -56,7 +56,7 @@
     const c = document.createElement('canvas'); c.width = 256; c.height = 112; const g = c.getContext('2d');
     g.fillStyle = '#d9d3c3'; g.fillRect(0, 0, 256, 112); g.fillStyle = '#26303a'; g.fillRect(8, 8, 240, 96);
     g.fillStyle = '#e8e2cf'; g.font = '700 64px monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(no), 128, 60);
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.22)); const right = b.x0 > 0;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.22)); const right = (b.x0 + b.x1) / 2 > (DORM.XS || 0);
     m.position.set(right ? b.x0 - 0.015 : b.x1 + 0.015, b.y1 + 0.17, (b.z0 + b.z1) / 2); m.rotation.y = right ? -Math.PI / 2 : Math.PI / 2;
     pushMesh('標示與門牌', '門牌_' + no, m, { color: '#ffffff', opacity: 1, tex: texKey(c), name: '門牌_' + no });
   }

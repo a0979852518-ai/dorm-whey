@@ -1555,7 +1555,7 @@ function buildDorm() {
   for (const o of [tv, remote, hou]) if (o) o.x = mx(o.x, C2);
   for (const bg of bags) bg[1] += XS;
   // 填滿：原本陽台西邊那塊空洞（交誼廳北牆外、一樓屋頂上方）做成實心建築
-  { const XB0 = XBAL0 + XS; S_('二樓_陽台西側建築', XO0 - WT, XB0, ZBAL - WT - 0.15, ZN1 - WT, F - 0.2, H2 + 0.15, C.wall); }
+  { const XB0 = XBAL0 + XS; S_('二樓_陽台西側建築', XO0 - WT, XB0, ZL0 - WT - 0.02, ZN1 - WT, F - 0.2, H2 + 0.15, C.wall); } // 往北一路填到晒衣場邊緣：一樓屋頂上那條往西的走道被封住，玩家不能從屋頂走出地圖
   // 加長那段南側（落地窗西邊）補上白牆
   S_('交誼廳_南牆_延伸', P0.x, -28.36 + XS, ZB - 0.02, ZB + 0.12, F, H2, C.wall); D_('交誼廳_踢腳板', P0.x, -28.36 + XS, ZB - 0.04, ZB - 0.02, F, F + 0.2, C.skirt);
   // 雙開門（銀色鋁框，兩扇都開著、關不起來）＋門框；門與落地窗中間放木頭塊堆成的擺飾

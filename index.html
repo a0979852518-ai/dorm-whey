@@ -1443,7 +1443,6 @@ function buildDorm() {
   for (const py of [1110, 1196]) { const z = bz(py); S_('浴廁_小便斗', BX1 - 0.34, BX1, z - 0.22, z + 0.22, F + 0.45, F + 1.1, C.white); D_('浴廁_感應器', BX1 - 0.08, BX1, z - 0.15, z + 0.15, F + 1.35, F + 1.5, C.white); }
   S_('浴廁_拖把桶', XAN + 0.3, XAN + 0.8, ZAN - 0.7, ZAN - 0.2, F, F + 0.5, 0x5b5f3a);
   // 入口
-  S_('浴廁_入口門楣', -XC, XC, BZ1, BZ1 + WT, F + 2.5, H2, C.tileW);
   // 巡邏點
   const AZ_ = (CZ0 + CZ1) / 2, ZS_ = (CZ1 + BZ1) / 2;
   for (const px of [189, 406, 610, 955, 1199, 1425]) patrol.push({ x: bx(px), z: AZ_, y: F });
@@ -1522,10 +1521,61 @@ function buildDorm() {
   const r208 = rooms.find((r) => r.no === 208);
   const hou = { x: r208.X(8.55), y: F + 0.01, z: r208.z0 + 0.75, talked: 0 }; // 進門左手邊靠窗的地上
   const bags = [[0, r208.X(2.3), r208.z0 + 1.0, 0.6], [1, r208.X(5.5), r208.z0 + 1.6, 0.55], [1, r208.X(1.2), r208.z0 + 2.9, 0.5], [0, r208.X(6.9), r208.z0 + 1.7, 0.46]];
+  // =====================================================================
+  // 樓梯上來後的走道加長 4.6 m：二樓在 x = C2 以東的東西（交誼廳、陽台、宿舍走廊、寢室、浴廁）全部往東移；
+  // 跨過分界線的（交誼廳北牆、樓板、天花板…）往東拉長補滿。一樓只有寢室那一棟（晒衣場東側外牆、室外樓梯平台）跟著移，晒衣場因此變寬。
+  // =====================================================================
+  const XS = 4.6, C2 = -28.1, C1 = -12.15;
+  const lvl2 = (y0, n) => y0 >= F - 0.21 && n !== '一樓屋頂';
+  const mx = (v, cut) => (v >= cut ? v + XS : v);
+  const fixBox = (b) => {
+    const cut = lvl2(b.y0, b.n) ? C2 : C1;
+    if (b.n === '中庭_草地' && b.x1 > -13.5) { b.x1 += XS; return; }
+    if (b.x0 >= cut) { b.x0 += XS; b.x1 += XS; }
+    else if (b.x1 > cut + 0.001) { if (b.n.includes('窗')) { b.x0 += XS; b.x1 += XS; } else b.x1 += XS; }
+  };
+  for (const b of solid) fixBox(b); for (const b of deco) fixBox(b);
+  for (const r of rots) r.x = mx(r.x, lvl2(r.y0, r.n) ? C2 : C1);
+  for (const p of prisms) for (const q of p.pts) q.x = mx(q.x, lvl2(p.y0, p.n) ? C2 : C1);
+  for (const bm of beams) { const c = Math.min(bm.y0, bm.y1) >= F - 0.21 ? C2 : C1; bm.x0 = mx(bm.x0, c); bm.x1 = mx(bm.x1, c); }
+  for (const r of terrazzo) { const c = r.y > 3 ? C2 : C1; if (r.x0 >= c) { r.x0 += XS; r.x1 += XS; } else if (r.x1 > c) r.x1 += XS; }
+  for (const p of tplanes) { const y = p.y ?? p.y0; const c = y > 3 ? C2 : C1; if (p.wall === 'x') p.x = mx(p.x, c); else { if (p.x0 >= c) { p.x0 += XS; p.x1 += XS; } else if (p.x1 > c) p.x1 += XS; } }
+  for (const s of signs) s.x = mx(s.x, s.y > 3.2 ? C2 : C1);
+  for (const e of lights) e.x = mx(e.x, e.y > 3.2 ? C2 : C1);
+  for (const d of doors) { const c = d.y0 > 3 ? C2 : C1; d.hx = mx(d.hx, c); d.cx = mx(d.cx, c); }
+  for (const p of patrol) p.x = mx(p.x, p.y > 3 ? C2 : C1);
+  for (const s of spots) if ((s.floor ?? 0) > 3 && s.x0 >= C2) { s.x0 += XS; s.x1 += XS; if (s.cx !== undefined) s.cx += XS; if (s.door) { s.door.x0 += XS; s.door.x1 += XS; } }
+  for (const r of rooms) { const oX = r.X; r.X = (d) => oX(d) + XS; r.cx += XS; }
+  for (const o of [tv, remote, hou]) if (o) o.x = mx(o.x, C2);
+  for (const bg of bags) bg[1] += XS;
+  // 填滿：原本陽台西邊那塊空洞（交誼廳北牆外、一樓屋頂上方）做成實心建築
+  { const XB0 = XBAL0 + XS; S_('二樓_陽台西側建築', XO0 - WT, XB0, ZBAL - WT - 0.15, ZN1 - WT, F - 0.2, H2 + 0.15, C.wall); }
+  // 加長那段南側（落地窗西邊）補上白牆
+  S_('交誼廳_南牆_延伸', P0.x, -28.36 + XS, ZB - 0.02, ZB + 0.12, F, H2, C.wall); D_('交誼廳_踢腳板', P0.x, -28.36 + XS, ZB - 0.04, ZB - 0.02, F, F + 0.2, C.skirt);
+  // 雙開門（銀色鋁框，兩扇都開著、關不起來）＋門框；門與落地窗中間放木頭塊堆成的擺飾
+  { const XD = -25.2, Z0 = ZN1, Z1 = ZB, DWh = 1.2, zc = (Z0 + Z1) / 2, AL = 0xb9bdbf, ALd = 0x8e9294;
+    S_('交誼廳_門牆', XD - 0.075, XD + 0.075, Z0, zc - DWh, F, H2, C.wall); S_('交誼廳_門牆', XD - 0.075, XD + 0.075, zc + DWh, Z1, F, H2, C.wall);
+    S_('交誼廳_門楣', XD - 0.075, XD + 0.075, zc - DWh, zc + DWh, F + 2.25, H2, C.wall);
+    for (const z of [zc - DWh - 0.06, zc + DWh]) D_('交誼廳_門框', XD - 0.1, XD + 0.1, z, z + 0.06, F, F + 2.28, AL);
+    D_('交誼廳_門框', XD - 0.1, XD + 0.1, zc - DWh - 0.06, zc + DWh + 0.06, F + 2.22, F + 2.28, AL);
+    for (const sg of [-1, 1]) { // 兩扇門往東推開、貼在門牆上
+      const zH = zc + sg * DWh, x0 = XD + 0.08, x1 = XD + 0.08 + DWh * 0.98, zz0 = sg < 0 ? zH + 0.01 : zH - 0.06, zz1 = zz0 + 0.05;
+      D_('交誼廳_雙開門', x0, x1, zz0, zz1, F + 0.02, F + 2.2, AL);
+      D_('交誼廳_雙開門玻璃窗戶', x0 + 0.12, x1 - 0.12, zz0 - 0.005, zz1 + 0.005, F + 1.0, F + 2.05, C.frost);
+      D_('交誼廳_門把', x1 - 0.18, x1 - 0.12, sg < 0 ? zz1 : zz0 - 0.05, sg < 0 ? zz1 + 0.05 : zz0, F + 0.7, F + 1.5, 0xd8d6cc);
+      S_('欄杆碰撞', x0, x1, zz0, zz1, F, F + 2.2, AL); // 開著的門扇擋路（看不見的碰撞）
+    }
+    // 木頭擺飾：八角形、木條一圈圈往上疊、上寬下窄
+    const px = XD + 0.55, pz = Z1 - 0.5, WD = [0x5c3420, 0x6a3d26, 0x4e2c1a];
+    D_('交誼廳_擺飾底板', px - 0.25, px + 0.25, pz - 0.25, pz + 0.25, F, F + 0.03, 0x5a3a22);
+    for (let k = 0; k < 14; k++) { const r = 0.16 + k * 0.016, y = F + 0.03 + k * 0.055; for (let j = 0; j < 8; j++) { const a = j * Math.PI / 4 + (k % 2) * Math.PI / 8;
+      rots.push({ n: '交誼廳_擺飾', x: px + Math.cos(a) * r, z: pz + Math.sin(a) * r, wa: r * 0.8, wb: 0.05, y0: y, y1: y + 0.05, ry: -a, c: WD[(j + k) % 3] }); } }
+    S_('欄杆碰撞', px - 0.35, px + 0.35, pz - 0.35, pz + 0.35, F, F + 0.8, 0x7a4a2c); // 擺飾的碰撞（看不見）
+  }
   return {
     solid, deco, spots, patrol, lights, signs, terrazzo, diag, rots, prisms, doors, beams, tplanes, sprisms, fogs, extra, tv, remote, hou, bags, rooms,
     F, H2, DOOR: { ...DOOR, z: ZB }, spawn: { x: DOOR.x, y: 0, z: ZB - 0.9 }, npc: { x: DOOR.x, y: 0, z: ZB - 3.2 },
-    bathZ: ZR0, wheyDesk: '二樓_208房_書桌1',
+    bathZ: ZR0, wheyDesk: '二樓_208房_書桌1', XS, altVia: { x: -13.4 + XS, y: F, z: ZR0 + 1.6 },
     exitSign: { x: DOOR.x, y: 2.78, z: ZB - 0.02 }, outside: { x: DOOR.x, z: ZB + 5, w: 14, d: 10 },
   };
 }
@@ -2192,8 +2242,9 @@ function sprismGeo(sp) {
     if (x < -28.5 && z > 4.6) return ['樓梯間', 0.85, 0.085, 0.32, 0.22];
     if (y > 3) {
       if (z < DORM.bathZ) return ['浴廁', 0.8, 0.055, 0.28, 0.2];
-      if (Math.abs(x) <= 2.6 && z < 4.6) return ['走廊', 0.55, 0.21, 0.3, 0.26];
-      if (Math.abs(x) > 2.6 && z < -0.8) return ['寢室', 0.12, 0.04, 0, 0];
+      const xr = x - DORM.XS; // 宿舍走廊中心線
+      if (Math.abs(xr) <= 2.6 && z < 4.6) return ['走廊', 0.55, 0.21, 0.3, 0.26];
+      if (Math.abs(xr) > 2.6 && z < -0.8) return ['寢室', 0.12, 0.04, 0, 0];
       return ['交誼廳', 0.38, 0.12, 0.12, 0.1];
     }
     if (z < -4.2 && x > -24.5) return ['戶外', 0.04, 0.24, 0, 0.07];
@@ -2226,7 +2277,7 @@ function sprismGeo(sp) {
   function roomSearchList(room, px, pz) {
     const near = DORM.rooms.filter((r) => (r.s === room.s && Math.abs(r.zc - room.zc) < 4.5) || (r.s !== room.s && Math.abs(r.zc - room.zc) < 0.5));
     const ez = pz + (Math.random() - 0.5) * 7; near.sort((a, b) => Math.abs(a.zc - ez) - Math.abs(b.zc - ez));
-    return near.map((r) => ({ no: r.no, out: { x: r.s * (2.5 - 0.7), y: DORM.F, z: r.zc }, in: { x: r.X(1.7), y: DORM.F, z: r.zc } }));
+    return near.map((r) => ({ no: r.no, out: { x: r.X(-0.85), y: DORM.F, z: r.zc }, in: { x: r.X(1.7), y: DORM.F, z: r.zc } }));
   }
   function heardNoise(loud, src) {
     $('micState').textContent = ''; G.lastNoise = performance.now();
@@ -2316,8 +2367,8 @@ function sprismGeo(sp) {
     await dialog(['乾你娘……', '剛剛在打遊戲，給我突然停電。', '我先去外面ㄅㄡˋ一根。', '……欸，你要不要也來一根？', '啊，這包只剩下一根了……', '算了，給你啦，我再去買。'], { name: '潘柏翰' });
     G.cigs = 1; SFX.pickup(); addItem('cig'); toast('獲得道具：香菸（只剩一根 · 按住 F 抽，可以短暫加速）', 3600);
     // 默默走出去：先走到走廊中間，再往南（樓梯那邊）走，越走越遠就不見了
-    const sx = panMesh.position.x, sz = panMesh.position.z, side = Math.sign(d.cx) || -1;
-    G.panWalk = { t: 0, pts: [[sx, sz], [side * 0.6, sz + 0.3], [side * 0.6, sz + 16]] };
+    const sx = panMesh.position.x, sz = panMesh.position.z, side = Math.sign(d.cx - DORM.XS) || -1;
+    G.panWalk = { t: 0, pts: [[sx, sz], [DORM.XS + side * 0.6, sz + 0.3], [DORM.XS + side * 0.6, sz + 16]] };
     G.inTalk = false; G.talkCD = performance.now() + 900; ui.pause.hidden = true; G.paused = false; lockPointer();
     setTimeout(() => { if (!locked() && !G.noLock && playable() && !dlgState) { G.paused = true; ui.pause.hidden = false; } }, 400);
   }
@@ -2648,7 +2699,7 @@ function sprismGeo(sp) {
         if (P.grounded) { // 每一步 = 相位走過 π；腳步聲對齊頭部下沉的瞬間
           const moved = Math.hypot(P.x - G.px0, P.z - G.pz0); const stepLen = P.running ? 1.45 : 0.95;
           const before = Math.floor((G.walk.phase - Math.PI / 2) / Math.PI); G.walk.phase += moved / stepLen * Math.PI;
-          if (Math.floor((G.walk.phase - Math.PI / 2) / Math.PI) !== before) { SFX.step(P.running, Math.abs(P.y - G.lastY) > 0.05, P.y > 3 && (P.z < DORM.bathZ || (Math.abs(P.x) > 2.2 && P.x > -9.6 && P.z < -0.8))); G.lastY = P.y; }
+          if (Math.floor((G.walk.phase - Math.PI / 2) / Math.PI) !== before) { SFX.step(P.running, Math.abs(P.y - G.lastY) > 0.05, P.y > 3 && (P.z < DORM.bathZ || (Math.abs(P.x - DORM.XS) > 2.2 && P.x - DORM.XS > -9.6 && P.z < -0.8))); G.lastY = P.y; }
         }
       }
       if (keys.Space && P.grounded && !dlgState) { P.vy = 4.3; P.grounded = false; }
@@ -2809,7 +2860,7 @@ function sprismGeo(sp) {
   ready.then(() => { spawnItems(); P.yaw = 0; requestAnimationFrame(frame); $('btnStart').disabled = false; $('btnStart').textContent = '開始遊戲'; });
 
   // 測試用
-  enemy.altVia = { x: -13.4, y: DORM.F, z: DORM.bathZ + 1.6 }; // 晒衣場室外樓梯頂端的平台（二樓浴廁旁）
+  enemy.altVia = DORM.altVia; // 晒衣場室外樓梯頂端的平台（二樓浴廁旁）
   window.__game = { camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
 })();
 

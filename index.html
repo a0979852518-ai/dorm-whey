@@ -1533,7 +1533,8 @@ function buildDorm() {
   const lvl2 = (y0, n) => y0 >= F - 0.21 && n !== '一樓屋頂';
   const mx = (v, cut) => (v >= cut ? v + XS : v);
   const fixBox = (b) => {
-    const cut = lvl2(b.y0, b.n) ? C2 : C1;
+    const yard = b.n.startsWith('中庭_') || (b.n === '欄杆碰撞' && b.z1 < -50); // 晒衣場裡的東西（含西側高樓的窗、室外樓梯平台的欄杆）一律照一樓的規則，不跟著二樓整體移動
+    const cut = (lvl2(b.y0, b.n) && !yard) ? C2 : C1;
     if (b.n === '中庭_草地' && b.x1 > -13.5) { b.x1 += XS; return; }
     if (b.n === '中庭_冷氣室外機' && b.x1 > C1) { b.x0 += XS; b.x1 += XS; return; } // 掛在寢室外牆上的冷氣室外機：整台跟著牆移，不要被拉長
     if (b.x0 >= cut) { b.x0 += XS; b.x1 += XS; }

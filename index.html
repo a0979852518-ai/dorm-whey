@@ -445,6 +445,28 @@ class World {
     // 動態碰撞（NPC、未解鎖的大門）
     this.dyn = [];
   }
+  // ---- 空間格（2 m 一格）：每次查詢只看附近的方塊，不再每次掃過整張地圖上千個方塊 ----
+  _grid() {
+    const n = this.solid.length * 7 + this.sight.length;
+    if (this._g && this._g.n === n) return this._g;
+    const CS = 2, solid = new Map(), sight = new Map();
+    const add = (m, b) => { const i0 = Math.floor(b.x0 / CS), i1 = Math.floor(b.x1 / CS), k0 = Math.floor(b.z0 / CS), k1 = Math.floor(b.z1 / CS);
+      for (let i = i0; i <= i1; i++) for (let k = k0; k <= k1; k++) { const key = (i + 4096) * 8192 + (k + 4096); let a = m.get(key); if (!a) m.set(key, a = []); a.push(b); } };
+    for (const b of this.solid) add(solid, b); for (const b of this.sight) add(sight, b);
+    this._g = { n, CS, solid, sight }; this._stamp = 1; return this._g;
+  }
+  // 對 (x±r, z±r) 範圍內的固定方塊各呼叫一次 cb（不重複）
+  _near(x, z, r, cb) {
+    const g = this._grid(), CS = g.CS, st = ++this._stamp;
+    const i0 = Math.floor((x - r) / CS), i1 = Math.floor((x + r) / CS), k0 = Math.floor((z - r) / CS), k1 = Math.floor((z + r) / CS);
+    for (let i = i0; i <= i1; i++) for (let k = k0; k <= k1; k++) { const a = g.solid.get((i + 4096) * 8192 + (k + 4096)); if (!a) continue; for (const b of a) { if (b._s === st) continue; b._s = st; if (cb(b)) return true; } }
+    return false;
+  }
+  _allNear(x, z, r, cb) {
+    if (this._near(x, z, r, cb)) return;
+    for (const b of this.extra) if (cb(b)) return;
+    for (const b of this.dyn) if (b.on !== false && cb(b)) return;
+  }
   _all(cb) {
     for (const b of this.solid) cb(b);
     for (const b of this.extra) cb(b);
@@ -453,33 +475,38 @@ class World {
   blocked(x, z, feet, r = K.R) {
     const lo = feet + K.STEP, hi = feet + K.HEAD, r2 = r * r;
     let hit = false;
-    this._all((b) => {
-      if (hit) return;
-      if (b.y1 <= lo || b.y0 >= hi) return;
+    this._allNear(x, z, r + 0.05, (b) => {
+      if (b.y1 <= lo || b.y0 >= hi) return false;
       const dx = Math.max(b.x0 - x, 0, x - b.x1);
       const dz = Math.max(b.z0 - z, 0, z - b.z1);
-      if (dx * dx + dz * dz < r2) hit = true;
+      if (dx * dx + dz * dz < r2) { hit = true; return true; }
+      return false;
     });
     return hit;
   }
-  pointSolid(x, y, z) { for (const b of this.solid) if (x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1 && z > b.z0 && z < b.z1) return true; return false; }
+  // 拋出去的東西：找第一個碰到的方塊（含邊距 m）
+  boxAt(x, y, z, m) {
+    const f = (b) => x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m && y > b.y0 && y < b.y1 + 0.02;
+    let hit = null; this._near(x, z, m, (b) => { if (f(b)) { hit = b; return true; } return false; }); if (hit) return hit;
+    for (const b of this.extra) if (f(b)) return b; return null;
+  }
+  pointSolid(x, y, z) { return this._near(x, z, 0, (b) => x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1 && z > b.z0 && z < b.z1); }
   blockedNav(x, z, h, r) {
     const lo = h + 0.4, hi = h + K.HEAD, r2 = r * r;
-    for (const b of this.solid) {
-      if (b.y1 <= lo || b.y0 >= hi) continue;
+    return this._near(x, z, r + 0.05, (b) => {
+      if (b.y1 <= lo || b.y0 >= hi) return false;
       const dx = Math.max(b.x0 - x, 0, x - b.x1);
       const dz = Math.max(b.z0 - z, 0, z - b.z1);
-      if (dx * dx + dz * dz < r2) return true;
-    }
-    return false;
+      return dx * dx + dz * dz < r2;
+    });
   }
   ground(x, z, feet, maxUp = K.STEP) {
     let best = -Infinity;
     const lim = feet + maxUp + 0.001;
-    this._all((b) => {
-      if (b.y1 > lim || b.y1 <= best) return;
-      if (x < b.x0 - 0.04 || x > b.x1 + 0.04 || z < b.z0 - 0.04 || z > b.z1 + 0.04) return;
-      best = b.y1;
+    this._allNear(x, z, 0.06, (b) => {
+      if (b.y1 > lim || b.y1 <= best) return false;
+      if (x < b.x0 - 0.04 || x > b.x1 + 0.04 || z < b.z0 - 0.04 || z > b.z1 + 0.04) return false;
+      best = b.y1; return false;
     });
     return best;
   }
@@ -505,28 +532,37 @@ class World {
     if (p.vy > 0) { // 撞頭
       const top0 = p.y + K.HEAD, top1 = ny + K.HEAD;
       let hit = false;
-      this._all((b) => {
-        if (b.y0 >= top0 - 0.01 && b.y0 <= top1 && p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1) hit = true;
-      });
+      this._allNear(p.x, p.z, 0, (b) => { if (b.y0 >= top0 - 0.01 && b.y0 <= top1 && p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1) { hit = true; return true; } return false; });
       if (hit) { p.vy = 0; ny = p.y; }
     }
     p.y = ny;
     if (p.grounded && p.vy <= 0 && g === -Infinity) p.grounded = false;
   }
-  // 線段與不透明物體是否相交（視線）
+  // 線段與不透明物體是否相交（視線）：沿著線段經過的格子逐格檢查
+  _segBox(b, ax, ay, az, dx, dy, dz) {
+    let t0 = 0, t1 = 1;
+    if (Math.abs(dx) < 1e-9) { if (ax < b.x0 || ax > b.x1) return false; }
+    else { let a = (b.x0 - ax) / dx, c = (b.x1 - ax) / dx; if (a > c) { const t = a; a = c; c = t; } t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) return false; }
+    if (Math.abs(dy) < 1e-9) { if (ay < b.y0 || ay > b.y1) return false; }
+    else { let a = (b.y0 - ay) / dy, c = (b.y1 - ay) / dy; if (a > c) { const t = a; a = c; c = t; } t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) return false; }
+    if (Math.abs(dz) < 1e-9) { if (az < b.z0 || az > b.z1) return false; }
+    else { let a = (b.z0 - az) / dz, c = (b.z1 - az) / dz; if (a > c) { const t = a; a = c; c = t; } t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) return false; }
+    return true;
+  }
   los(ax, ay, az, bx, by, bz) {
     const dx = bx - ax, dy = by - ay, dz = bz - az;
-    const list = this.dyn.some((b) => b.sight && b.on !== false) ? this.sight.concat(this.dyn.filter((b) => b.sight && b.on !== false)) : this.sight;
-    for (const b of list) {
-      let t0 = 0, t1 = 1;
-      // x
-      if (Math.abs(dx) < 1e-9) { if (ax < b.x0 || ax > b.x1) continue; }
-      else { let a = (b.x0 - ax) / dx, c = (b.x1 - ax) / dx; if (a > c) { const t = a; a = c; c = t; } t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) continue; }
-      if (Math.abs(dy) < 1e-9) { if (ay < b.y0 || ay > b.y1) continue; }
-      else { let a = (b.y0 - ay) / dy, c = (b.y1 - ay) / dy; if (a > c) { const t = a; a = c; c = t; } t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) continue; }
-      if (Math.abs(dz) < 1e-9) { if (az < b.z0 || az > b.z1) continue; }
-      else { let a = (b.z0 - az) / dz, c = (b.z1 - az) / dz; if (a > c) { const t = a; a = c; c = t; } t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) continue; }
-      return false;
+    for (const b of this.dyn) if (b.sight && b.on !== false && this._segBox(b, ax, ay, az, dx, dy, dz)) return false;
+    const g = this._grid(), CS = g.CS, st = ++this._stamp;
+    let i = Math.floor(ax / CS), k = Math.floor(az / CS); const ie = Math.floor(bx / CS), ke = Math.floor(bz / CS);
+    const si = dx > 0 ? 1 : -1, sk = dz > 0 ? 1 : -1;
+    const tdx = Math.abs(dx) < 1e-12 ? Infinity : CS / Math.abs(dx), tdz = Math.abs(dz) < 1e-12 ? Infinity : CS / Math.abs(dz);
+    let tmx = Math.abs(dx) < 1e-12 ? Infinity : ((si > 0 ? (i + 1) * CS - ax : ax - i * CS) / Math.abs(dx));
+    let tmz = Math.abs(dz) < 1e-12 ? Infinity : ((sk > 0 ? (k + 1) * CS - az : az - k * CS) / Math.abs(dz));
+    for (let guard = 0; guard < 4000; guard++) {
+      const a = g.sight.get((i + 4096) * 8192 + (k + 4096));
+      if (a) for (const b of a) { if (b._s === st) continue; b._s = st; if (this._segBox(b, ax, ay, az, dx, dy, dz)) return false; }
+      if (i === ie && k === ke) break;
+      if (tmx < tmz) { if (tmx > 1) break; i += si; tmx += tdx; } else { if (tmz > 1) break; k += sk; tmz += tdz; }
     }
     return true;
   }
@@ -1148,7 +1184,7 @@ function buildDorm() {
   patrol.push({ x: XA + 0.8, z: 6.2, y: F }, { x: -26, z: 6.6, y: F }, { x: -16, z: 6.6, y: F }, { x: TX + 3, z: TZ, y: F }, { x: -6, z: 12.5, y: F }, { x: -24.4, z: 1.8, y: F }, { x: -5, z: 6.6, y: F });
 
   // =====================================================================
-  // 宿舍走廊與寢室（右側 201–215、左側 216–230，由北往南）
+  // 宿舍走廊與寢室（右側 201–215 由南往北、左側 216–230 由北往南，整圈像 U 字）
   // 走廊參考照片：米色牆、黑色踢腳板、門在寢室正中間、門上方有高窗、天花板線槽
   // =====================================================================
   S_('走廊_地板', -XC, XC, ZR0, ZEND, F - 0.2, F, C.corr);
@@ -1252,7 +1288,7 @@ function buildDorm() {
   };
   for (const s of [1, -1]) {
     const cs = [];
-    for (let i = 0; i < NR; i++) cs.push(room(s, i, s > 0 ? 201 + i : 216 + i));
+    for (let i = 0; i < NR; i++) cs.push(room(s, i, s > 0 ? 215 - i : 216 + i)); // 東側由南往北 201→215（215 靠浴廁），西側由北往南 216→230
     corridorWall(s, ZR0, ZR1, cs);
   }
   // 右側南段：上鎖的房間（不能進入，門一樣在中間）
@@ -1417,10 +1453,10 @@ function buildDorm() {
   // 一樓中庭（大廳北側、宿管室旁的門出去）：走道＋兩塊草地＋曬衣桿；北端有室外樓梯上二樓浴室
   // 參考照片：左邊是別棟的高牆、右邊是宿舍寢室（有鐵窗與冷氣室外機）
   // =====================================================================
-  const YX0 = XO1, YX1 = -XE, YZ1 = ZL0 - WT, YZ0 = ZR0 - 2.3; // 中庭範圍（西：宿管室東側那條線、東：寢室外牆）
+  const YX0 = XO0 - WT - 0.35, YX1 = -XE, YZ1 = ZL0 - WT, YZ0 = ZR0 - 2.3; // 中庭範圍（西：宿管室東側那條線、東：寢室外牆）
   const CC = { conc: 0x55564f, grass: 0x3d6524, post: 0x3a2e24, bar: 0x8a8d8c, fac: 0xb9b6ad, win: 0x1a2226, ac: 0xd6d6d0, gate: 0x141414 };
   S_('中庭_地面', YX0, YX1, YZ0, ZL0, -0.22, 0, CC.conc);
-  D_('中庭_草地', -22.3, YX1 - 0.7, -54.4, -26.1, 0, 0.03, CC.grass);
+  D_('中庭_草地', -22.3, YX1 - 0.7, -54.4, -26.1, 0, 0.03, CC.grass); D_('中庭_草地', YX0 + 1.0, -23.4, -54.4, -6.2, 0, 0.03, CC.grass); // 往西加寬的那一塊草地
   D_('中庭_草地', -22.3, YX1 - 0.7, -21.4, -5.4, 0, 0.03, CC.grass);
   D_('中庭_排水溝蓋', YX0, YX0 + 0.5, YZ0, YZ1, 0, 0.012, 0x7c807f);
   // 曬衣桿（紅色）：每排三根木樁＋一根橫桿
@@ -1448,7 +1484,7 @@ function buildDorm() {
     D_('中庭_冷氣室外機', YX1 - 0.4, YX1, zc + 1.1, zc + 1.85, F + 0.2, F + 0.75, CC.ac);
   }
   S_('中庭_南側牆', XL1 + WT, YX1, YZ1 - WT, YZ1, 0, F, C.wall);
-  S_('一樓屋頂', YX0, YX1, YZ1 - 0.02, ZN1, F - 0.2, F - 0.02, C.slab); // 大廳北半部的屋頂（從中庭看得到）
+  S_('一樓屋頂', XO1, YX1, YZ1 - 0.02, ZN1, F - 0.2, F - 0.02, C.slab); // 大廳北半部的屋頂（從中庭看得到）
   // 室外樓梯：從中庭往東上到二樓浴室（扶手是矮牆）
   const SZ0 = ZR0 + 0.2, SZ1 = SZ0 + 1.6, ST = 0.36, SXL = -XE - 2.74, SX0 = SXL - 16 * ST, sr = F / 16, RC = 0xd8d8d2; // 欄杆：白色鐵欄杆
   const rails = []; // 欄杆的扶手線（斜的用 beams 畫）
@@ -1539,17 +1575,17 @@ function sprismGeo(sp) {
 
   // ---------- 渲染器 ----------
   const canvas = $('view');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   const DPR_MAX = Math.min(window.devicePixelRatio || 1, 1.25); let dpr = DPR_MAX; renderer.setPixelRatio(dpr);
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x020203);
   scene.fog = new THREE.FogExp2(0x020203, 0.095);
-  const camera = new THREE.PerspectiveCamera(72, 1, 0.08, 90);
+  const camera = new THREE.PerspectiveCamera(72, 1, 0.1, 90);
   camera.rotation.order = 'YXZ';
   scene.add(camera);
   function resize() { const w = window.innerWidth, h = window.innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
@@ -1560,13 +1596,28 @@ function sprismGeo(sp) {
   (function buildEnv() {
     const pushBox = (arr, b) => { const { x0, x1, y0, y1, z0, z1 } = b; const v = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]; for (const f of [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]]) { for (const i of [f[0], f[1], f[2], f[0], f[2], f[3]]) arr.push(...v[i]); } };
     const bg = new Map(), glass = [], frost = [];
-    DORM.solid.concat(DORM.deco).forEach((b, i) => {
-      if (b.n.startsWith('空氣牆') || b.n === '斜牆碰撞' || b.n.startsWith('樓梯碰撞') || b.n === '欄杆碰撞') return;
-      const g = 0.0004 + ((i * 7) % 11) * 0.00025; // 每個方塊往外撐開一點點（各不相同）：接縫不留縫、重疊面也不會閃爍
-      const bb = { x0: b.x0 - g, x1: b.x1 + g, y0: b.y0 - g, y1: b.y1 + g, z0: b.z0 - g, z1: b.z1 + g };
-      if (b.n.includes('窗戶')) { pushBox(b.c === 0xc9ccc4 ? frost : glass, bb); return; }
+    // 1) 同顏色、截面完全相同、首尾相接的方塊先合併成一塊（接縫直接消失，也少很多三角形）
+    const boxes = [];
+    for (const b of DORM.solid.concat(DORM.deco)) { if (b.n.startsWith('空氣牆') || b.n === '斜牆碰撞' || b.n.startsWith('樓梯碰撞') || b.n === '欄杆碰撞') continue; boxes.push({ x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, c: b.c, win: b.n.includes('窗戶') }); }
+    const mergeAxis = (list, ax) => {
+      const o = ax === 'x' ? ['y', 'z'] : ax === 'y' ? ['x', 'z'] : ['x', 'y'], r = (v) => Math.round(v * 2000);
+      const groups = new Map();
+      for (const b of list) { if (b.win) continue; const k = b.c + '|' + r(b[o[0] + '0']) + ',' + r(b[o[0] + '1']) + ',' + r(b[o[1] + '0']) + ',' + r(b[o[1] + '1']); let a = groups.get(k); if (!a) groups.set(k, a = []); a.push(b); }
+      const out = list.filter((b) => b.win);
+      for (const a of groups.values()) { a.sort((p, q) => p[ax + '0'] - q[ax + '0']); let cur = null;
+        for (const b of a) { if (cur && b[ax + '0'] <= cur[ax + '1'] + 0.0006) cur[ax + '1'] = Math.max(cur[ax + '1'], b[ax + '1']); else { if (cur) out.push(cur); cur = { ...b }; } }
+        if (cur) out.push(cur); }
+      return out;
+    };
+    let merged = boxes; for (let pass = 0; pass < 2; pass++) for (const ax of ['x', 'z', 'y']) merged = mergeAxis(merged, ax);
+    // 2) 往外撐開的量依「顏色」決定：同顏色的相鄰方塊表面完全對齊（不會露出一條暗縫），不同顏色疊在一起時又錯開一點點（不會閃爍）
+    const gOf = (c) => 0.0005 + (((c * 2654435761) >>> 0) % 13) * 0.00035;
+    for (const b of merged) {
+      const g = gOf(b.c); const bb = { x0: b.x0 - g, x1: b.x1 + g, y0: b.y0 - g, y1: b.y1 + g, z0: b.z0 - g, z1: b.z1 + g };
+      if (b.win) { pushBox(b.c === 0xc9ccc4 ? frost : glass, bb); continue; }
       let a = bg.get(b.c); if (!a) bg.set(b.c, a = []); pushBox(a, bb);
-    });
+    }
+    window.__boxStats = { before: boxes.length, after: merged.length };
     // 斜向的方塊、斜牆、斜梁、多邊形平台：全部烘成世界座標後併入同色的大網格（大幅減少 draw call）
     const bake = (geo, obj, c) => { obj.updateMatrixWorld(true); const g = (geo.index ? geo.toNonIndexed() : geo); g.applyMatrix4(obj.matrixWorld); const pa = g.getAttribute('position').array; let a = bg.get(c); if (!a) bg.set(c, a = []); for (let i = 0; i < pa.length; i++) a.push(pa[i]); };
     DORM.rots.forEach((r, i) => { const g = 0.0006 + ((i * 5) % 13) * 0.0004; const o = new THREE.Object3D(); o.position.set(r.x, (r.y0 + r.y1) / 2, r.z); o.rotation.y = r.ry; bake(new THREE.BoxGeometry(r.wb + 2 * g, r.y1 - r.y0 + 2 * g, r.wa + 2 * g), o, r.c); }); // 每塊撐開不同量，避免重疊面閃爍
@@ -1638,7 +1689,7 @@ function sprismGeo(sp) {
   })();
   // 敵人紅光
   const eSpot = new THREE.SpotLight(0xff1410, 0, 19, 0.62, 0.45, 1.25);
-  eSpot.castShadow = true; eSpot.shadow.mapSize.set(1024, 1024); eSpot.shadow.camera.near = 0.2; eSpot.shadow.camera.far = 19; eSpot.shadow.bias = -0.0015; eSpot.shadow.normalBias = 0.03;
+  eSpot.castShadow = true; eSpot.shadow.mapSize.set(768, 768); eSpot.shadow.camera.near = 0.2; eSpot.shadow.camera.far = 19; eSpot.shadow.bias = -0.0015; eSpot.shadow.normalBias = 0.03;
   scene.add(eSpot); scene.add(eSpot.target);
   renderer.shadowMap.autoUpdate = false; // 只有敵人出現時才更新陰影
   // 他身上的紅色光暈：用發光貼圖（會被牆擋住），不再用會穿牆的點光源
@@ -2421,7 +2472,11 @@ function sprismGeo(sp) {
     if (P.y > 3 && P.y < 3.7) {
       let best = null, bd = 1e9;
       for (const b of L.usableBeds) {
-        if (b.kind === 'bed') { const d = L.rectDist(b, P.x, P.z); if (d < 0.95 && d < bd && world.los(ex, ey, ez, b.cx, b.top + 0.45, b.cz)) { bd = d; best = b; } }
+        if (b.kind === 'bed') { // 上床不用一直對準：站在床邊 1.4 m 內、看得到床的任何一個角落（或床邊、梯子那一側）就可以
+          const d = L.rectDist(b, P.x, P.z); if (d >= 1.4 || d >= bd) continue;
+          const nx = Math.max(b.x0, Math.min(P.x, b.x1)), nz = Math.max(b.z0, Math.min(P.z, b.z1));
+          const pts = [[b.cx, b.top + 0.45, b.cz], [nx, b.top + 0.6, nz], [nx, b.top - 0.4, nz], [(nx + b.cx) / 2, b.top + 0.8, (nz + b.cz) / 2]];
+          if (d < 0.6 || pts.some(([x, y, z]) => world.los(ex, ey, ez, x, y, z))) { bd = d; best = b; } }
         else if (P.x > b.x0 - 0.15 && P.x < b.x1 + 0.15 && P.z > b.z0 - 0.15 && P.z < b.z1 + 0.15) { const d = Math.hypot(P.x - b.cx, P.z - b.cz) * 0.1; if (d < bd) { bd = d; best = b; } }
       }
       if (best) return { kind: 'bed', bed: best, text: best.kind === 'stall' ? '按 F 關上門躲起來' : best.kind === 'shower' ? '按 F 拉上浴簾躲起來' : '按 F 躲到床上' };
@@ -2478,9 +2533,7 @@ function sprismGeo(sp) {
         f.vx *= -0.15; f.vz *= -0.15; f.vy = 1;
         continue;
       }
-      let hit = null;
-      const all = world.solid.concat(world.extra);
-      for (const b of all) { if (f.x > b.x0 - 0.1 && f.x < b.x1 + 0.1 && f.z > b.z0 - 0.1 && f.z < b.z1 + 0.1 && f.y > b.y0 && f.y < b.y1 + 0.02) { hit = b; break; } }
+      const hit = world.boxAt(f.x, f.y, f.z, 0.1);
       if (hit) {
         const speed = Math.hypot(f.vx, f.vy, f.vz);
         if (py >= hit.y1 - 0.03) { f.y = hit.y1; if (Math.abs(f.vy) > 2.2) { f.vy *= -0.28; f.vx *= 0.5; f.vz *= 0.5; } else { f.vy = 0; f.vx *= 0.6; f.vz *= 0.6; if (Math.hypot(f.vx, f.vz) < 0.4) { land(); return; } } }
@@ -2498,8 +2551,7 @@ function sprismGeo(sp) {
   const DROPS = [];
   function flyPhys(f, h) { // 回傳 'land' 表示停下
     const px = f.x, py = f.y, pz = f.z; f.vy -= 9.8 * h; f.x += f.vx * h; f.y += f.vy * h; f.z += f.vz * h; f.spin = (f.spin || 0) + h * 8;
-    let hit = null; const all = world.solid.concat(world.extra);
-    for (const b of all) { if (f.x > b.x0 - 0.06 && f.x < b.x1 + 0.06 && f.z > b.z0 - 0.06 && f.z < b.z1 + 0.06 && f.y > b.y0 && f.y < b.y1 + 0.02) { hit = b; break; } }
+    const hit = world.boxAt(f.x, f.y, f.z, 0.06);
     if (hit) {
       const sp = Math.hypot(f.vx, f.vy, f.vz);
       if (py >= hit.y1 - 0.03) { f.y = hit.y1; if (Math.abs(f.vy) > 1.6) { f.vy *= -0.32; f.vx *= 0.55; f.vz *= 0.55; } else { f.vy = 0; f.vx *= 0.5; f.vz *= 0.5; if (Math.hypot(f.vx, f.vz) < 0.35) return 'land'; } }
@@ -2732,25 +2784,33 @@ function sprismGeo(sp) {
   }
   // 自適應解析度：畫面卡頓時自動降低渲染解析度，讓轉向保持流暢
   let fpsAcc = 0, fpsN = 0;
+  // 自動解析度：以前每 1.5 秒就可能上下切換，幀率在 45～55 之間時會一直來回跳，看起來像畫面在抖。
+  // 現在：要連續 2 次（約 4 秒）太慢才降；要連續 4 次（約 8 秒）夠快、而且距離上次調整 15 秒以上才升；來回切換 2 次後就固定不再變。
+  const RES = { low: 0, high: 0, lastChange: -1e9, flips: 0, lastDir: 0, locked: false };
   function adaptRes(dt) {
     fpsAcc += dt; fpsN++;
-    if (fpsAcc < 1.5) return;
-    const fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0;
-    let nd = dpr;
-    if (fps < 42 && dpr > 0.6) nd = Math.max(0.6, dpr - 0.15);
-    else if (fps > 57 && dpr < DPR_MAX) nd = Math.min(DPR_MAX, dpr + 0.1);
-    if (nd !== dpr) { dpr = nd; renderer.setPixelRatio(dpr); resize(); }
+    if (fpsAcc < 2) return;
+    const fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0; if (RES.locked) return;
+    const now = performance.now() / 1000;
+    RES.low = fps < 40 ? RES.low + 1 : 0; RES.high = fps > 58 ? RES.high + 1 : 0;
+    let nd = dpr, dir = 0;
+    if (RES.low >= 2 && dpr > 0.6) { nd = Math.max(0.6, dpr - 0.15); dir = -1; }
+    else if (RES.high >= 4 && dpr < DPR_MAX && now - RES.lastChange > 15) { nd = Math.min(DPR_MAX, dpr + 0.1); dir = 1; }
+    if (nd !== dpr) {
+      if (RES.lastDir && dir !== RES.lastDir) { RES.flips++; if (RES.flips >= 2) { RES.locked = true; if (dir > 0) return; } }
+      RES.lastDir = dir; RES.lastChange = now; RES.low = 0; RES.high = 0; dpr = nd; renderer.setPixelRatio(dpr); resize();
+    }
   }
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (npcMesh) { update(dt); place(dt); renderer.shadowMap.needsUpdate = eSpot.intensity > 0.01; renderer.render(scene, camera); adaptRes(dt); }
+    if (npcMesh) { update(dt); place(dt); G.shF = (G.shF || 0) + 1; renderer.shadowMap.needsUpdate = eSpot.intensity > 0.01 && (G.shF % 2 === 0); renderer.render(scene, camera); adaptRes(dt); }
     requestAnimationFrame(frame);
   }
   ready.then(() => { spawnItems(); P.yaw = 0; requestAnimationFrame(frame); $('btnStart').disabled = false; $('btnStart').textContent = '開始遊戲'; });
 
   // 測試用
   enemy.altVia = { x: -13.4, y: DORM.F, z: DORM.bathZ + 1.6 }; // 晒衣場室外樓梯頂端的平台（二樓浴廁旁）
-  window.__game = { SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
+  window.__game = { camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
 })();
 
 </script>

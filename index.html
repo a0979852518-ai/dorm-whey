@@ -1127,6 +1127,7 @@ function buildDorm() {
   for (let i = 0; i < 24; i++) { const a = Pp(L * (i + 0.5) / 24, -0.3); S_('斜牆碰撞', a.x - 0.25, a.x + 0.25, a.z - 0.25, a.z + 0.25, 0, TOP, C.wall); }
   D_('樓梯間_天花板', XW - WT, P0.x + 0.2, ZT - 0.1, ZC + WT, TOP, TOP + 0.1, C.ceil);
   S_('樓梯間_上方牆', XW, XA, ZT - 0.08, ZT, F3, TOP, C.wall);
+  S_('樓梯間西牆', XW - WT, XW, ZN1, ZHN, F, TOP, C.wall); // 交誼廳北牆和樓梯間西牆之間原本有一條縫看得到外面
   patrol.push({ x: XA + 1.2, z: 7.2, y: 0 }, { x: XW + 1.1, z: 7.6, y: F });
 
   // =====================================================================
@@ -2628,8 +2629,8 @@ function buildProps(DORM, scene) {
   function micEcho() {
     const E = MIC.echo; if (!E) return; const C = AU.ctx, t = C.currentTime;
     const on = (G.phase === 'intro' || G.phase === 'quest' || G.phase === 'chase') && !G.paused && MIC.calibT <= 0;
-    const open = on ? clamp((MIC.rms - MIC.floor * 1.6) / (MIC.floor * 5 + 0.008), 0, 1) : 0;
-    E.gate.gain.setTargetAtTime(open * 1.6, t, open > E.gate.gain.value ? 0.015 : 0.08);
+    const open = on ? clamp((MIC.rms - MIC.floor * 1.15) / (MIC.floor * 1.8 + 0.002), 0, 1) : 0; // 回音的門檻比捲毛聽到的門檻（micThr）低很多：正常音量說話就有回音
+    E.gate.gain.setTargetAtTime(open * 2.4, t, open > E.gate.gain.value ? 0.015 : 0.08);
     const [name, rv, dt, fbk, wet] = echoZone();
     if (name !== E.zone) { E.zone = name; E.rev.gain.setTargetAtTime(rv, t, 0.4); E.dl.delayTime.setTargetAtTime(dt, t, 0.3); E.fb.gain.setTargetAtTime(fbk, t, 0.3); E.wet.gain.setTargetAtTime(wet, t, 0.3); }
   }

@@ -707,8 +707,8 @@
   function micEcho() {
     const E = MIC.echo; if (!E) return; const C = AU.ctx, t = C.currentTime;
     const on = (G.phase === 'intro' || G.phase === 'quest' || G.phase === 'chase') && !G.paused && MIC.calibT <= 0;
-    const open = on ? clamp((MIC.rms - MIC.floor * 1.6) / (MIC.floor * 5 + 0.008), 0, 1) : 0;
-    E.gate.gain.setTargetAtTime(open * 1.6, t, open > E.gate.gain.value ? 0.015 : 0.08);
+    const open = on ? clamp((MIC.rms - MIC.floor * 1.15) / (MIC.floor * 1.8 + 0.002), 0, 1) : 0; // 回音的門檻比捲毛聽到的門檻（micThr）低很多：正常音量說話就有回音
+    E.gate.gain.setTargetAtTime(open * 2.4, t, open > E.gate.gain.value ? 0.015 : 0.08);
     const [name, rv, dt, fbk, wet] = echoZone();
     if (name !== E.zone) { E.zone = name; E.rev.gain.setTargetAtTime(rv, t, 0.4); E.dl.delayTime.setTargetAtTime(dt, t, 0.3); E.fb.gain.setTargetAtTime(fbk, t, 0.3); E.wet.gain.setTargetAtTime(wet, t, 0.3); }
   }

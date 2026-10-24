@@ -244,6 +244,7 @@ export function buildDorm() {
   for (let i = 0; i < 24; i++) { const a = Pp(L * (i + 0.5) / 24, -0.3); S_('斜牆碰撞', a.x - 0.25, a.x + 0.25, a.z - 0.25, a.z + 0.25, 0, TOP, C.wall); }
   D_('樓梯間_天花板', XW - WT, P0.x + 0.2, ZT - 0.1, ZC + WT, TOP, TOP + 0.1, C.ceil);
   S_('樓梯間_上方牆', XW, XA, ZT - 0.08, ZT, F3, TOP, C.wall);
+  S_('樓梯間西牆', XW - WT, XW, ZN1, ZHN, F, TOP, C.wall); // 交誼廳北牆和樓梯間西牆之間原本有一條縫看得到外面
   patrol.push({ x: XA + 1.2, z: 7.2, y: 0 }, { x: XW + 1.1, z: 7.6, y: F });
 
   // =====================================================================

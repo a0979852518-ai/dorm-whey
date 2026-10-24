@@ -2609,7 +2609,7 @@ function buildProps(DORM, scene) {
   }
   function updateZhu(dt) {
     if (!ZHU.meshes) return; const M = ZHU.meshes;
-    if (G.phase !== 'quest' || ZHU.st === 'gone') { M.forEach((m) => { m.visible = false; }); ZHU.slow = false; if (G.phase === 'chase' && ZHU.st === 'idle') ZHU.st = 'gone'; return; }
+    if ((G.phase !== 'quest' && G.phase !== 'intro') || ZHU.st === 'gone') { M.forEach((m) => { m.visible = false; }); ZHU.slow = false; if (G.phase === 'chase' && ZHU.st === 'idle') ZHU.st = 'gone'; return; }
     if (G.paused) return;
     const F = DORM.F, d = Math.hypot(ZHU.x - P.x, ZHU.z - P.z), inCorr = P.y > 3 && Math.abs(P.x - DORM.XS) < 2.7 && P.z < 4.9;
     const see = inCorr && world.los(P.x, P.y + 1.6, P.z, ZHU.x, F + 1.4, ZHU.z);

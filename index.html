@@ -3190,7 +3190,8 @@ function buildProps(DORM, scene) {
       if (P.exhausted && P.stamina >= 35) P.exhausted = false;
       P.running = !!(want && P.stamina > 0 && !P.exhausted && !ZHU.slow); // 看到竹竿時被迫用走的
       if (P.running) P.stamina = Math.max(0, P.stamina - 15 * dt); else P.stamina = Math.min(100, P.stamina + 10 * dt);
-      const sp = (P.running ? 5.0 : 2.3) * ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1);
+      const sp = (P.running ? 5.0 : 1.55) * // 走路放慢（探索時壓抑的步調），跑步不變（捲毛追逐的平衡）
+         ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1);
       if (moving) {
         const l = Math.hypot(mx, mz); mx /= l; mz /= l;
         const s = Math.sin(P.yaw), c = Math.cos(P.yaw);
@@ -3198,7 +3199,7 @@ function buildProps(DORM, scene) {
         const n = Math.ceil(Math.hypot(wx, wz) / 0.08); G.px0 = P.x; G.pz0 = P.z;
         for (let i = 0; i < n; i++) world.move(P, wx / n, wz / n);
         if (P.grounded) { // 每一步 = 相位走過 π；腳步聲對齊頭部下沉的瞬間
-          const moved = Math.hypot(P.x - G.px0, P.z - G.pz0); const stepLen = P.running ? 1.6 : 1.3; // 走路步伐大、節奏慢（約每秒 1.8 步）；跑步約每秒 3 步
+          const moved = Math.hypot(P.x - G.px0, P.z - G.pz0); const stepLen = P.running ? 1.6 : 1.08; // 走路約每秒 1.4 步（慢而沉）；跑步約每秒 3 步
           const before = Math.floor((G.walk.phase - Math.PI / 2) / Math.PI); G.walk.phase += moved / stepLen * Math.PI;
           if (Math.floor((G.walk.phase - Math.PI / 2) / Math.PI) !== before) { G.walk.kick = 1; G.walk.foot = -(G.walk.foot || 1); SFX.step(P.running, Math.abs(P.y - G.lastY) > 0.05, P.y > 3 && (P.z < DORM.bathZ || (Math.abs(P.x - DORM.XS) > 2.2 && P.x - DORM.XS > -9.6 && P.z < -0.8)), false, G.walk.foot, G.walk.amp); G.lastY = P.y; }
         }

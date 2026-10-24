@@ -336,7 +336,7 @@
     for (const k of ['amb', 'horror', 'chase', 'hb', 'sfx']) { AU[k] = C.createGain(); AU[k].connect(AU.master); }
     AU.horror.gain.value = 0; AU.chase.gain.value = 0; AU.hb.gain.value = 0;
     AU.noise = noiseBuf(C, 2);
-    AU.voice = {}; for (const k of ['roar1', 'roar2', 'c_huan', 'c_bie', 'c_zhan', 'c_ah', 'c_ruqing', 'bgm_chase', 'chase_loop', 'breath', 'step_soft', 'step_hard', 'step_heavy']) { try { C.decodeAudioData(b64ToAB(A[k]), (buf) => { AU.voice[k] = buf; }, () => { }); } catch (e) { } }
+    AU.voice = {}; for (const k of ['roar1', 'roar2', 'c_huan', 'c_bie', 'c_zhan', 'c_ah', 'c_ruqing', 'bgm_chase', 'chase_loop', 'breath', 'step_soft', 'step_hard', 'step_heavy', 'door_crash']) { try { C.decodeAudioData(b64ToAB(A[k]), (buf) => { AU.voice[k] = buf; }, () => { }); } catch (e) { } }
     // 環境低鳴
     const lp = C.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 150; const ag = C.createGain(); ag.gain.value = 0.07; lp.connect(ag); ag.connect(AU.amb);
     for (const f of [41.2, 41.75, 61.9]) { const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(); }
@@ -405,6 +405,11 @@
       const lfo = C.createOscillator(); lfo.frequency.value = 23; const lg = C.createGain(); lg.gain.value = 40; lfo.connect(lg); lg.connect(o.frequency);
       o.connect(bp); bp.connect(g); g.connect(d); o.start(t); lfo.start(t); o.stop(t + 0.6); lfo.stop(t + 0.6);
       noiseHit(d, t + 0.42, 'bandpass', 2200, 2, 0.25, 0.002, 0.05); // 鉸鏈螺絲崩掉的「喀」
+    },
+    doorCrashRec(x, y, z, lead) { // 使用者提供的門板砸下錄音：從倒下那一刻開始播，最大聲的那一下剛好對在門撞到的瞬間
+      const C = AU.ctx, buf = AU.voice && AU.voice.door_crash; if (!C || !buf) return false;
+      const d = out(AU.sfx, x, y, z, 0.7), s = C.createBufferSource(); s.buffer = buf; const g = C.createGain(); g.gain.value = 1.6; s.connect(g); g.connect(d);
+      s.start(C.currentTime, Math.max(0, 0.61 - lead)); return true;
     },
     doorCrash(x, y, z) { // 門板拍在磁磚地上：碰！＋回音很重的浴室殘響＋木板彈兩下
       if (!AU.ctx) return; const C = AU.ctx, t = C.currentTime, d = out(AU.sfx, x, y, z, 1.1);
@@ -741,12 +746,12 @@
       if (dist < 2.0 || dist > 7.5) return;
       const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw); if ((fx * dx + fz * dz) / dist < 0.8) return; // 要正在看著它
       if (!world.los(P.x, P.y + eyeH(), P.z, d.x + d.out * 0.1, d.y0 + 1.0, cz)) return;
-      FD.st = 'fall'; FD.t = 0; FD.box.on = false; FD.block.on = true; return;
+      FD.st = 'fall'; FD.t = 0; FD.box.on = false; FD.block.on = true; try { FD.rec = SFX.doorCrashRec(d.x + d.out * 0.8, d.y0 + 1.0, cz, 0.42); } catch (e) { FD.rec = false; } return;
     }
     FD.t += dt; const t = FD.t;
     if (FD.st === 'fall') {
       const T = 0.42, k = Math.min(1, t / T); FD.piv.rotation.set(0, 0, fdRot(FD.thF * k * k));
-      if (k >= 1) { FD.st = 'bounce'; FD.t = 0; FD.block.on = true; try { SFX.doorCrash(d.x + d.out * 0.8, d.y0 + 1.0, cz); } catch (e) { } G.shake = Math.max(G.shake || 0, 0.5);
+      if (k >= 1) { FD.st = 'bounce'; FD.t = 0; FD.block.on = true; if (!FD.rec) try { SFX.doorCrash(d.x + d.out * 0.8, d.y0 + 1.0, cz); } catch (e) { } G.shake = Math.max(G.shake || 0, 0.5);
         if (enemy.active && G.phase === 'chase' && Math.abs(enemy.y - d.y0) < 1.5 && Math.hypot(enemy.x - d.x, enemy.z - cz) < 18) enemy.hear(d.x, d.y0, cz); }
       return;
     }
@@ -1225,10 +1230,12 @@
   }
 
   // ---------- 輸入 ----------
+  window.addEventListener('beforeunload', (e) => { if (playable() && G.phase !== 'won' && G.phase !== 'dead') { e.preventDefault(); e.returnValue = ''; } }); // 蹲著（Ctrl）按到 W 會變成 Ctrl+W 關分頁：先跳出確認
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Tab' && G.phase === 'choice') return;
     keys[e.code] = true;
     if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code) && G.phase !== 'start') e.preventDefault();
+    if (e.ctrlKey && playable()) e.preventDefault(); // 蹲下是 Ctrl：擋掉 Ctrl+D、Ctrl+S 之類的瀏覽器快捷鍵（Ctrl+W 擋不掉，改用離開前確認）
     if (e.code === 'KeyF') {
       if (e.repeat) return;
       if (dlgState) { advanceDialog(); return; }
@@ -1267,7 +1274,7 @@
       // 體力歸零 → 進入「力竭」：只能走路，要等體力回復到 35% 才能再跑
       if (P.stamina <= 0) P.exhausted = true;
       if (P.exhausted && P.stamina >= 35) P.exhausted = false;
-      P.crouch = !!keys.KeyC && P.grounded; // 按住 C 蹲下：走得很慢、腳步很輕、不能跑，比較不容易被看到、聽到
+      P.crouch = !!(keys.ControlLeft || keys.ControlRight) && P.grounded; // 按住 Ctrl 蹲下：走得很慢、腳步很輕、不能跑，比較不容易被看到、聽到
       P.cr = (P.cr || 0) + ((P.crouch ? 1 : 0) - (P.cr || 0)) * (1 - Math.exp(-dt * 9));
       P.running = !!(want && P.stamina > 0 && !P.exhausted && !ZHU.slow && !P.crouch); // 看到竹竿時被迫用走的
       if (P.running) P.stamina = Math.max(0, P.stamina - 15 * dt); else P.stamina = Math.min(100, P.stamina + 10 * dt);

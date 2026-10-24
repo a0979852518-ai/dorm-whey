@@ -2273,24 +2273,25 @@ function buildProps(DORM, scene) {
   }
   // 腳步聲錄音：每個檔是 8 個腳步排在一起（每格 SLOT 秒、開頭 0.05 秒留白），隨機挑一格播
   const STEP_SLOT = { step_soft: 0.47, step_hard: 0.35, step_heavy: 0.65 };
-  function playStep(key, dest, gain, rate, lowpass) {
+  function playStep(key, dest, gain, rate, lowpass, pan = 0) {
     const C = AU.ctx, buf = AU.voice && AU.voice[key]; if (!C || !buf) return false;
     const L = STEP_SLOT[key], n = Math.max(1, Math.floor(buf.duration / L + 0.01)), k = (Math.random() * n) | 0;
     const s = C.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; const g = C.createGain(); g.gain.value = gain;
     let node = s; if (lowpass) { const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; s.connect(f); node = f; }
-    node.connect(g); g.connect(dest); s.start(C.currentTime, k * L + 0.03, L - 0.03); return true;
+    node.connect(g); if (pan && C.createStereoPanner) { const sp = C.createStereoPanner(); sp.pan.value = pan; g.connect(sp); sp.connect(dest); } else g.connect(dest); s.start(C.currentTime, k * L + 0.03, L - 0.03); return true;
   }
   function env(g, t, a, peak, d) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
   function noiseHit(dest, t, type, f, q, peak, a, d) { const C = AU.ctx; const s = C.createBufferSource(); s.buffer = AU.noise; const b = C.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; const g = C.createGain(); env(g, t, a, peak, d); s.connect(b); b.connect(g); g.connect(dest); s.start(t, Math.random()); s.stop(t + a + d + 0.05); return b; }
   function tone(dest, t, type, f0, f1, peak, a, d) { const C = AU.ctx; const o = C.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + a + d); const g = C.createGain(); env(g, t, a, peak, d); o.connect(g); g.connect(dest); o.start(t); o.stop(t + a + d + 0.05); return o; }
   const SFX = {
-    step(run, stair, inRoom, land) {
+    step(run, stair, inRoom, land, foot = 0, amp = 1) {
       if (!AU.ctx) return; const C = AU.ctx, t = C.currentTime; const tile = P.z < DORM.bathZ && P.y > 3;
       { // 真實錄音的腳步聲（使用者提供）：浴廁磁磚 → 硬底清脆的；寢室 → 悶一點；晒衣場草地 → 很悶很小聲；其他（磨石子走廊、大廳、樓梯）→ 一般室內腳步；跳下落地 → 重的
         const yard = P.y < 1 && P.z < -0.8 && P.x > -24.5, set = land ? 'step_heavy' : tile ? 'step_hard' : 'step_soft';
         const d = out(AU.sfx, undefined, 0, 0, tile ? 0.5 : inRoom ? 0.25 : yard ? 0.05 : 0.2);
         const g = (land ? 0.7 : run ? 0.5 : 0.32) * rand(0.85, 1.1) * (yard ? 0.55 : 1);
-        if (playStep(set, d, g, (run ? 1.08 : 1) * rand(0.95, 1.05), yard ? 700 : inRoom ? 3200 : 0)) {
+        if (playStep(set, d, g * (0.55 + 0.45 * Math.min(1, amp)), (run ? 1.1 : 0.97) * rand(0.95, 1.05), yard ? 700 : inRoom ? 3200 : 0, foot * (run ? 0.1 : 0.16))) { // 左右腳輪流稍微偏左偏右（跟鏡頭左右晃同步）；起步、停下時比較輕
+          if (run && !yard) noiseHit(d, t + 0.06, 'bandpass', rand(1800, 2600), 0.9, g * 0.06, 0.004, 0.05); // 跑步時腳尖蹬地的擦聲
           if (stair) tone(d, t, 'triangle', rand(160, 190), 120, g * 0.12, 0.003, 0.1); // 樓梯的空心感
           if (yard) noiseHit(d, t + 0.01, 'bandpass', rand(2500, 3500), 0.8, g * 0.08, 0.01, 0.08); // 踩草的沙沙聲
           return;
@@ -2914,7 +2915,7 @@ function buildProps(DORM, scene) {
     for (const d of DOORS) { d.open = false; d.ang = 0; d.piv.rotation.y = d.base; d.box.on = true; }
     MAIN.open = false; MAIN.ang = 0; for (const l of MAIN.leaves) l.piv.rotation.y = 0;
     for (const sp of L.usableBeds) if (sp.doorMesh) sp.doorMesh.visible = false;
-    Object.assign(G.walk, { phase: 0, amp: 0, run: 0, land: 0, fov: 72 }); G.exert = 0; G.held = false;
+    Object.assign(G.walk, { phase: 0, amp: 0, run: 0, land: 0, fov: 72, kick: 0, foot: 1 }); G.exert = 0; G.held = false;
     for (const k of ['dead', 'won', 'scare', 'start', 'pause', 'choice', 'dialog']) ui[k === 'dialog' ? 'dlg' : k].hidden = true;
     ui.hud.hidden = false; ui.fade.className = 'fade'; ui.hideFx.hidden = true; ui.danger.style.opacity = 0;
     setObjective('跟大廳裡的樓友說話');
@@ -3137,9 +3138,9 @@ function buildProps(DORM, scene) {
         const n = Math.ceil(Math.hypot(wx, wz) / 0.08); G.px0 = P.x; G.pz0 = P.z;
         for (let i = 0; i < n; i++) world.move(P, wx / n, wz / n);
         if (P.grounded) { // 每一步 = 相位走過 π；腳步聲對齊頭部下沉的瞬間
-          const moved = Math.hypot(P.x - G.px0, P.z - G.pz0); const stepLen = P.running ? 1.45 : 0.95;
+          const moved = Math.hypot(P.x - G.px0, P.z - G.pz0); const stepLen = P.running ? 1.6 : 1.3; // 走路步伐大、節奏慢（約每秒 1.8 步）；跑步約每秒 3 步
           const before = Math.floor((G.walk.phase - Math.PI / 2) / Math.PI); G.walk.phase += moved / stepLen * Math.PI;
-          if (Math.floor((G.walk.phase - Math.PI / 2) / Math.PI) !== before) { SFX.step(P.running, Math.abs(P.y - G.lastY) > 0.05, P.y > 3 && (P.z < DORM.bathZ || (Math.abs(P.x - DORM.XS) > 2.2 && P.x - DORM.XS > -9.6 && P.z < -0.8))); G.lastY = P.y; }
+          if (Math.floor((G.walk.phase - Math.PI / 2) / Math.PI) !== before) { G.walk.kick = 1; G.walk.foot = -(G.walk.foot || 1); SFX.step(P.running, Math.abs(P.y - G.lastY) > 0.05, P.y > 3 && (P.z < DORM.bathZ || (Math.abs(P.x - DORM.XS) > 2.2 && P.x - DORM.XS > -9.6 && P.z < -0.8)), false, G.walk.foot, G.walk.amp); G.lastY = P.y; }
         }
       }
       if (keys.Space && P.grounded && !dlgState) { P.vy = 4.3; P.grounded = false; }
@@ -3239,10 +3240,14 @@ function buildProps(DORM, scene) {
     const Wk = G.walk; let side = 0, roll = 0, tilt = 0;
     if (!(P.hidden && G.bed)) {
       const r = Wk.run, A = Wk.amp, ph = Wk.phase;
-      const up = -0.5 * (1 - Math.cos(2 * ph)) * (0.03 + 0.04 * r) * A;   // 每一步平順下沉（腳落地時最低）
-      side = Math.sin(ph) * (0.022 + 0.022 * r) * A;                        // 左右重心轉移
-      roll = Math.sin(ph) * (0.005 + 0.011 * r) * A;                        // 身體側傾
-      tilt = Math.cos(2 * ph) * 0.006 * r * A;                              // 跑步時微微點頭
+      const s2 = Math.sin(ph) * Math.sin(ph);
+      Wk.kick = Math.max(0, (Wk.kick || 0) - dt * (6 + 4 * r));              // 腳落地的瞬間頭會頓一下（跟腳步聲同時）
+      const kk = Wk.kick * Wk.kick;
+      let up = -(r > 0.5 ? Math.pow(s2, 1.6) : s2) * (0.045 + 0.03 * r) * A;   // 每一步下沉：走路是大而慢的起伏，跑步落地更頓
+      up -= kk * (0.007 + 0.014 * r) * A;
+      side = Math.sin(ph) * (0.03 + 0.012 * r) * A;                         // 左右重心轉移（走路時身體會明顯左右換腳）
+      roll = Math.sin(ph) * (0.008 + 0.008 * r) * A;                        // 身體側傾
+      tilt = Math.sin(2 * ph) * 0.0025 * (1 - r) * A + Math.cos(2 * ph) * 0.006 * r * A + kk * (0.003 + 0.006 * r) * A; // 走路微微點頭、跑步點頭、落地往下頓
       const heave = Math.sin(t * (1.4 + G.exert * 2.6)) * (0.004 + G.exert * 0.016); // 呼吸起伏，喘越大越明顯
       Wk.land = Math.max(0, Wk.land - dt * 3.2);
       const land = -Math.sin(Math.min(1, Wk.land) * Math.PI) * 0.12 * Wk.land;

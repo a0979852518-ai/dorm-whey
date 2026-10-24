@@ -381,7 +381,7 @@
       { // 真實錄音的腳步聲（使用者提供）：浴廁磁磚 → 硬底清脆的；寢室 → 悶一點；晒衣場草地 → 很悶很小聲；其他（磨石子走廊、大廳、樓梯）→ 一般室內腳步；跳下落地 → 重的
         const yard = P.y < 1 && P.z < -0.8 && P.x > -24.5, set = land ? 'step_heavy' : tile ? 'step_hard' : 'step_soft';
         const d = out(AU.sfx, undefined, 0, 0, tile ? 0.5 : inRoom ? 0.25 : yard ? 0.05 : 0.2);
-        const g = (land ? 0.7 : run ? 0.5 : 0.32) * rand(0.85, 1.1) * (yard ? 0.55 : 1);
+        const g = (land ? 0.7 : run ? 0.5 : 0.32) * rand(0.85, 1.1) * (yard ? 0.55 : 1) * (land ? 1 : 1 - 0.6 * (P.cr || 0)); // 蹲著走腳步很輕
         if (playStep(set, d, g * (0.55 + 0.45 * Math.min(1, amp)), (run ? 1.1 : 0.97) * rand(0.95, 1.05), yard ? 700 : inRoom ? 3200 : 0, foot * (run ? 0.1 : 0.16))) { // 左右腳輪流稍微偏左偏右（跟鏡頭左右晃同步）；起步、停下時比較輕
           if (run && !yard) noiseHit(d, t + 0.06, 'bandpass', rand(1800, 2600), 0.9, g * 0.06, 0.004, 0.05); // 跑步時腳尖蹬地的擦聲
           if (stair) tone(d, t, 'triangle', rand(160, 190), 120, g * 0.12, 0.003, 0.1); // 樓梯的空心感
@@ -1043,7 +1043,7 @@
 
   // ---------- 互動 ----------
   function findTarget() {
-    const ex = P.x, ey = P.y + K.EYE, ez = P.z;
+    const ex = P.x, ey = P.y + eyeH(), ez = P.z;
     const fx = -Math.sin(P.yaw) * Math.cos(P.pitch), fy = Math.sin(P.pitch), fz = -Math.cos(P.yaw) * Math.cos(P.pitch);
     const facing = (x, y, z) => { const dx = x - ex, dy = y - ey, dz = z - ez, l = Math.hypot(dx, dy, dz) || 1; return (dx * fx + dy * fy + dz * fz) / l; };
     if (G.phase === 'intro' && Math.hypot(P.x - npcPos.x, P.z - npcPos.z) < 2.4 && P.y < 1) return { kind: 'npc', text: '按 F 進行對話' };
@@ -1099,7 +1099,7 @@
     if (it === 'pot') {
       removeItem('pot'); SFX.whoosh();
       const fx = -Math.sin(P.yaw) * Math.cos(P.pitch), fy = Math.sin(P.pitch), fz = -Math.cos(P.yaw) * Math.cos(P.pitch);
-      pot.fly = { x: P.x + fx * 0.5, y: P.y + K.EYE - 0.15 + fy * 0.5, z: P.z + fz * 0.5, vx: fx * 13, vy: fy * 13 + 2.2, vz: fz * 13, noise: false, rest: 0 };
+      pot.fly = { x: P.x + fx * 0.5, y: P.y + eyeH() - 0.15 + fy * 0.5, z: P.z + fz * 0.5, vx: fx * 13, vy: fy * 13 + 2.2, vz: fz * 13, noise: false, rest: 0 };
       pot.inWorld = false; potMesh.visible = true;
     } else if (it === 'whey') secondSip();
     else if (it === 'cig') { // 抽一根：短暫加速
@@ -1154,7 +1154,7 @@
   function dropCurrent() {
     const it = G.items[G.cur]; if (!it || !playable() || G.paused || P.hidden || dlgState) return;
     const fx = -Math.sin(P.yaw) * Math.cos(P.pitch), fy = Math.sin(P.pitch), fz = -Math.cos(P.yaw) * Math.cos(P.pitch);
-    const v = 5.2, start = { x: P.x + fx * 0.45, y: P.y + K.EYE - 0.25 + fy * 0.3, z: P.z + fz * 0.45 };
+    const v = 5.2, start = { x: P.x + fx * 0.45, y: P.y + eyeH() - 0.25 + fy * 0.3, z: P.z + fz * 0.45 };
     if (world.pointSolid(start.x, start.y, start.z)) { start.x = P.x; start.z = P.z; }
     ui.hand.classList.add('toss'); setTimeout(() => ui.hand.classList.remove('toss'), 260); SFX.whoosh();
     removeItem(it);
@@ -1209,6 +1209,7 @@
 
   // ---------- 主迴圈 ----------
   let last = performance.now();
+  const eyeH = () => K.EYE - 0.62 * (P.cr || 0); // 蹲下時眼睛高度降低約 60 cm
   function update(dt) {
     updateDoors(dt); updatePan(dt); updateZhu(dt);
     if ((G.boostT || 0) > 0 && !G.paused && !dlgState) { G.boostT -= dt; if (G.boostT <= 0) toast('菸的效果退了', 1800); }
@@ -1220,10 +1221,12 @@
       // 體力歸零 → 進入「力竭」：只能走路，要等體力回復到 35% 才能再跑
       if (P.stamina <= 0) P.exhausted = true;
       if (P.exhausted && P.stamina >= 35) P.exhausted = false;
-      P.running = !!(want && P.stamina > 0 && !P.exhausted && !ZHU.slow); // 看到竹竿時被迫用走的
+      P.crouch = !!keys.KeyC && P.grounded; // 按住 C 蹲下：走得很慢、腳步很輕、不能跑，比較不容易被看到、聽到
+      P.cr = (P.cr || 0) + ((P.crouch ? 1 : 0) - (P.cr || 0)) * (1 - Math.exp(-dt * 9));
+      P.running = !!(want && P.stamina > 0 && !P.exhausted && !ZHU.slow && !P.crouch); // 看到竹竿時被迫用走的
       if (P.running) P.stamina = Math.max(0, P.stamina - 15 * dt); else P.stamina = Math.min(100, P.stamina + 10 * dt);
       const sp = (P.running ? 5.0 : 1.55) * // 走路放慢（探索時壓抑的步調），跑步不變（捲毛追逐的平衡）
-         ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1);
+         ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1) * (1 - 0.48 * P.cr);
       if (moving) {
         const l = Math.hypot(mx, mz); mx /= l; mz /= l;
         const s = Math.sin(P.yaw), c = Math.cos(P.yaw);
@@ -1231,7 +1234,7 @@
         const n = Math.ceil(Math.hypot(wx, wz) / 0.08); G.px0 = P.x; G.pz0 = P.z;
         for (let i = 0; i < n; i++) world.move(P, wx / n, wz / n);
         if (P.grounded) { // 每一步 = 相位走過 π；腳步聲對齊頭部下沉的瞬間
-          const moved = Math.hypot(P.x - G.px0, P.z - G.pz0); const stepLen = P.running ? 1.6 : 1.08; // 走路約每秒 1.4 步（慢而沉）；跑步約每秒 3 步
+          const moved = Math.hypot(P.x - G.px0, P.z - G.pz0); const stepLen = P.running ? 1.6 : 1.08 - 0.3 * P.cr; // 走路約每秒 1.4 步（慢而沉）；跑步約每秒 3 步
           const before = Math.floor((G.walk.phase - Math.PI / 2) / Math.PI); G.walk.phase += moved / stepLen * Math.PI;
           if (Math.floor((G.walk.phase - Math.PI / 2) / Math.PI) !== before) { G.walk.kick = 1; G.walk.foot = -(G.walk.foot || 1); SFX.step(P.running, Math.abs(P.y - G.lastY) > 0.05, P.y > 3 && (P.z < DORM.bathZ || (Math.abs(P.x - DORM.XS) > 2.2 && P.x - DORM.XS > -9.6 && P.z < -0.8)), false, G.walk.foot, G.walk.amp); G.lastY = P.y; }
         }
@@ -1247,7 +1250,7 @@
       if (P.running) G.exert = Math.min(1, G.exert + dt * 0.2); else G.exert = Math.max(0, G.exert - dt * (moving ? 0.045 : 0.09));
       if (P.exhausted) G.exert = Math.max(G.exert, 0.85);
       if (P.y < -8) { P.x = SPAWN_X; P.y = 0; P.z = SPAWN_Z; P.vy = 0; }
-    } else if (!P.hidden) { P.running = false; P.stamina = Math.min(100, P.stamina + 10 * dt); }
+    } else if (!P.hidden) { P.crouch = false; P.running = false; P.stamina = Math.min(100, P.stamina + 10 * dt); }
     else { P.running = false; P.stamina = Math.min(100, P.stamina + 10 * dt); }
     // 體力條
     ui.stamina.style.transform = `scaleX(${P.stamina / 100})`; ui.staminaWrap.classList.toggle('empty', !!P.exhausted); ui.staminaLbl.textContent = P.exhausted ? '體力耗盡 · 恢復中' : 'SHIFT 奔跑'; ui.staminaWrap.classList.toggle('low', P.stamina < 30);
@@ -1333,7 +1336,7 @@
     const Wk = G.walk; let side = 0, roll = 0, tilt = 0;
     if (!(P.hidden && G.bed)) {
       const r = Wk.run, A = Wk.amp, ph = Wk.phase;
-      const s2 = Math.sin(ph) * Math.sin(ph);
+      const s2 = Math.sin(ph) * Math.sin(ph) * (1 - 0.45 * (P.cr || 0));
       Wk.kick = Math.max(0, (Wk.kick || 0) - dt * (6 + 4 * r));              // 腳落地的瞬間頭會頓一下（跟腳步聲同時）
       const kk = Wk.kick * Wk.kick;
       let up = -(r > 0.5 ? Math.pow(s2, 1.6) : s2) * (0.045 + 0.03 * r) * A;   // 每一步下沉：走路是大而慢的起伏，跑步落地更頓
@@ -1344,7 +1347,7 @@
       const heave = Math.sin(t * (1.4 + G.exert * 2.6)) * (0.004 + G.exert * 0.016); // 呼吸起伏，喘越大越明顯
       Wk.land = Math.max(0, Wk.land - dt * 3.2);
       const land = -Math.sin(Math.min(1, Wk.land) * Math.PI) * 0.12 * Wk.land;
-      camPos.set(P.x, P.y + K.EYE + up + heave + land, P.z);
+      camPos.set(P.x, P.y + eyeH() + up + heave + land, P.z);
     }
     // 跑步時視野略為拉寬
     const fov = 72 + Wk.run * 5 + G.exert * 1.5; if (Math.abs(fov - Wk.fov) > 0.01) { Wk.fov += (fov - Wk.fov) * (1 - Math.exp(-dt * 6)); camera.fov = Wk.fov; camera.updateProjectionMatrix(); }

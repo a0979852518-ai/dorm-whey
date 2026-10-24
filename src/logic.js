@@ -533,9 +533,9 @@ export class Enemy {
   }
   canSee(P) {
     const dx = P.x - this.x, dz = P.z - this.z; const dist = Math.hypot(dx, dz);
-    if (dist > (P.light === false ? 11 : 30) || Math.abs(P.y - this.y) > 4) return false;
+    if (dist > (P.light === false ? 11 : 30) * (P.crouch ? 0.7 : 1) || Math.abs(P.y - this.y) > 4) return false; // 蹲著比較難被看到（看得到的距離短、矮的東西擋得住）
     if (dist > 2.2) { const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw); const dot = (fx * dx + fz * dz) / dist; if (dot < 0.42) return false; }
-    return this.w.los(this.x, this.y + 1.55, this.z, P.x, P.y + 1.5, P.z);
+    return this.w.los(this.x, this.y + 1.55, this.z, P.x, P.y + (P.crouch ? 0.85 : 1.5), P.z);
   }
   // P: {x,y,z,hidden,running}；回傳事件陣列 'spot','lose','catch','hideCatch'
   update(dt, P) {

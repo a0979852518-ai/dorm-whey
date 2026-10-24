@@ -410,7 +410,9 @@
       if (!AU.ctx) return; const C = AU.ctx, t = C.currentTime, d = out(AU.sfx, x, y, z, 1.1);
       tone(d, t, 'sine', 95, 38, 1.1, 0.003, 0.32); noiseHit(d, t, 'lowpass', 1400, 0.8, 1.0, 0.001, 0.22); noiseHit(d, t, 'bandpass', 3200, 1.2, 0.35, 0.001, 0.09);
       playStep('step_heavy', d, 1.5, 0.62, 2500);
-      for (const [dt, gv] of [[0.16, 0.35], [0.27, 0.16], [0.34, 0.07]]) { noiseHit(d, t + dt, 'lowpass', 1100, 0.8, gv, 0.001, 0.08); tone(d, t + dt, 'sine', 120, 60, gv * 0.6, 0.002, 0.1); }
+      // 康啷康啷：門板彈跳＋掉下來的鐵鉸鏈在磁磚上亂跳（金屬的不和諧泛音，間隔越來越短、越來越小聲）
+      const clank = (tt, f, gv) => { for (const [m, a] of [[1, 1], [2.76, 0.55], [5.4, 0.3], [8.9, 0.15]]) tone(d, tt, 'sine', f * m, f * m * 0.985, gv * a, 0.001, 0.18 + 0.12 / m); noiseHit(d, tt, 'highpass', 2500, 0.8, gv * 0.6, 0.001, 0.025); };
+      [[0.17, 0.5, 640], [0.36, 0.42, 720], [0.52, 0.32, 600], [0.64, 0.26, 760], [0.73, 0.18, 680], [0.8, 0.12, 740], [0.85, 0.08, 700]].forEach(([dt, gv, f]) => { clank(t + dt + rand(-0.015, 0.015), f * rand(0.95, 1.05), gv); noiseHit(d, t + dt, 'lowpass', 900, 0.8, gv * 0.5, 0.001, 0.06); });
     },
     zhuStep(x, y, z) { // 竹竿穿拖鞋跑步：啪噠啪噠
       if (!AU.ctx) return; const t = AU.ctx.currentTime, d = out(AU.sfx, x, y + 0.1, z, 0.35);
@@ -721,38 +723,36 @@
   loadTex(A.cig).then((t) => { TEX.cig = t; });
   loadTex(A.pan).then((t) => { panMesh = billboard(t, 1.76, 0x0c0c0c); panMesh.visible = false; });
   // ---------- 浴室外間老舊的門：玩家看著它、距離剛好時倒下來（沒看到不會倒）----------
-  const FD = { d: DORM.fallDoor, st: 'up', t: 0, piv: null, box: null };
-  if (FD.d) { const d = FD.d, W = d.z1 - d.z0;
-    FD.piv = new THREE.Group(); FD.piv.position.set(d.x, d.y0, (d.z0 + d.z1) / 2); scene.add(FD.piv);
+  const FD = { d: DORM.fallDoor, st: 'up', t: 0, piv: null };
+  if (FD.d) { const d = FD.d, W = d.x1 - d.x0;
+    FD.piv = new THREE.Group(); FD.piv.position.set((d.x0 + d.x1) / 2, d.y0, d.z); scene.add(FD.piv);
     const mat = new THREE.MeshPhongMaterial({ color: d.c, shininess: 12, specular: 0x1a1a1a });
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.04, d.h, W), mat); leaf.position.set(0, d.h / 2, 0); leaf.castShadow = leaf.receiveShadow = true; FD.piv.add(leaf);
-    const hm = new THREE.MeshPhongMaterial({ color: 0x8a8c88, shininess: 60 });
-    const h = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.1), hm); h.position.set(0, d.h - 0.25, -W / 2); FD.piv.add(h); // 只剩上面一個鉸鏈
-    FD.base = { rx: 0.06, rz: -0.03 * d.fall }; FD.piv.rotation.set(FD.base.rx, 0, FD.base.rz); // 歪歪的掛著
-    FD.box = { n: 'fallDoor', x0: d.x - 0.06, x1: d.x + 0.06, z0: d.z0, z1: d.z1, y0: d.y0, y1: d.y0 + d.h, on: true, sight: false }; world.dyn.push(FD.box);
-    FD.thF = Math.PI / 2 + Math.asin(Math.min(0.5, (d.y0 - d.floor) / d.h));
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(W, d.h, 0.04), mat); leaf.position.set(0, d.h / 2, 0); leaf.castShadow = leaf.receiveShadow = true; FD.piv.add(leaf);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.05), new THREE.MeshPhongMaterial({ color: 0xd9d9d2 })); plate.position.set(0, 1.55, 0); FD.piv.add(plate);
+    FD.base = { rx: -0.04, rz: 0.03 }; FD.piv.rotation.set(FD.base.rx, 0, FD.base.rz); // 只剩一個鉸鏈、歪歪的掛著（沒有碰撞，不擋捲毛的路）
+    FD.thF = Math.PI / 2 + Math.asin(Math.min(0.5, (d.y0 - d.floor) / d.h)); // 平躺在台階地面上
   }
-  function fallDoorReset() { if (!FD.d) return; FD.st = 'up'; FD.t = 0; FD.piv.rotation.set(FD.base.rx, 0, FD.base.rz); FD.box.on = true; }
+  function fallDoorReset() { if (!FD.d) return; FD.st = 'up'; FD.t = 0; FD.piv.rotation.set(FD.base.rx, 0, FD.base.rz); }
   function updateFallDoor(dt) {
-    if (!FD.d || FD.st === 'down' || G.paused) return; const d = FD.d, cz = (d.z0 + d.z1) / 2, rz = (a) => -a * d.fall;
+    if (!FD.d || FD.st === 'down' || G.paused) return; const d = FD.d, cx = (d.x0 + d.x1) / 2;
     if (FD.st === 'up') {
-      if (!playable() || P.hidden || P.y > d.floor + 0.15 || P.z < d.edge) return; // 只在走道（較低那層）上觸發
-      const dx = d.x - P.x, dz = cz - P.z, dist = Math.hypot(dx, dz);
-      if (dist < 2.6 || dist > 6.5) return; // 倒下來的範圍約 1.9 m，不會砸到玩家
-      const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw); if ((fx * dx + fz * dz) / dist < 0.82) return; // 要正在看著它
-      if (!world.los(P.x, P.y + eyeH(), P.z, d.x - d.fall * 0.15, d.y0 + 1.0, cz)) return;
-      FD.st = 'creak'; FD.t = 0; try { SFX.doorCreak(d.x, d.y0 + 1.5, cz); } catch (e) { }
+      if (!playable() || P.hidden || P.z < d.z + 2.15) return; // 玩家在門倒下範圍（往南 1.85 m）之外
+      const dx = cx - P.x, dz = d.z - P.z, dist = Math.hypot(dx, dz);
+      if (dist > 7.5) return;
+      const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw); if ((fx * dx + fz * dz) / dist < 0.8) return; // 要正在看著它
+      if (!world.los(P.x, P.y + eyeH(), P.z, cx, d.y0 + 1.0, d.z + 0.1)) return;
+      FD.st = 'creak'; FD.t = 0; try { SFX.doorCreak(cx, d.y0 + 1.5, d.z); } catch (e) { }
       return;
     }
     FD.t += dt; const t = FD.t, b0 = FD.base;
-    if (FD.st === 'creak') { FD.piv.rotation.set(b0.rx + Math.sin(t * 40) * 0.025, 0, b0.rz + rz(t * 0.1)); if (t > 0.5) { FD.st = 'fall'; FD.t = 0; FD.box.on = false; } return; }
+    if (FD.st === 'creak') { FD.piv.rotation.set(b0.rx + Math.sin(t * 40) * 0.025, 0, b0.rz + t * 0.08); if (t > 0.5) { FD.st = 'fall'; FD.t = 0; } return; }
     if (FD.st === 'fall') {
-      const T = 0.62, k = Math.min(1, t / T), a0 = 0.05; FD.piv.rotation.set(b0.rx * (1 - k), 0, rz(a0 + (FD.thF - a0) * k * k));
-      if (k >= 1) { FD.st = 'bounce'; FD.t = 0; try { SFX.doorCrash(d.x + d.fall * 0.9, d.floor + 0.2, cz); } catch (e) { } G.shake = Math.max(G.shake || 0, 0.5);
-        if (enemy.active && G.phase === 'chase' && Math.abs(enemy.y - d.floor) < 1.5 && Math.hypot(enemy.x - d.x, enemy.z - cz) < 18) enemy.hear(d.x, d.floor, cz); }
+      const T = 0.62, k = Math.min(1, t / T), a0 = b0.rx; FD.piv.rotation.set(a0 + (FD.thF - a0) * k * k, 0, (b0.rz + 0.04) * (1 - k));
+      if (k >= 1) { FD.st = 'bounce'; FD.t = 0; try { SFX.doorCrash(cx, d.floor + 0.2, d.z + 0.9); } catch (e) { } G.shake = Math.max(G.shake || 0, 0.5);
+        if (enemy.active && G.phase === 'chase' && Math.abs(enemy.y - d.floor) < 1.5 && Math.hypot(enemy.x - cx, enemy.z - d.z) < 18) enemy.hear(cx, d.floor, d.z + 0.9); }
       return;
     }
-    if (FD.st === 'bounce') { const bb = Math.abs(Math.sin(t * 22)) * Math.exp(-t * 9) * 0.07; FD.piv.rotation.set(0, 0, rz(FD.thF - bb)); if (t > 0.6) { FD.piv.rotation.set(0, 0, rz(FD.thF)); FD.st = 'down'; } }
+    if (FD.st === 'bounce') { const bb = Math.abs(Math.sin(t * 17)) * Math.exp(-t * 4.5) * 0.08; FD.piv.rotation.set(FD.thF - bb, 0, 0); if (t > 0.95) { FD.piv.rotation.set(FD.thF, 0, 0); FD.st = 'down'; } }
   }
   // ---------- 竹竿：222 和 210 門前、走廊正中間站著不動；看得到他時玩家被迫用走的，靠近一點他就朝玩家跑過來、擦身而過跑掉（不會傷人）----------
   const ZHU = { meshes: null, st: 'idle', slow: false };

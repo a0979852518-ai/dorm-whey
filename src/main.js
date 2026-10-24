@@ -360,6 +360,10 @@
       if (tile) noiseHit(d, t, 'highpass', 3500, 0.7, g * 0.22, 0.001, 0.025);                           // 磁磚地的清脆聲
       if (!run && Math.random() < 0.06) tone(d, t + 0.05, 'sine', rand(2600, 3200), rand(3300, 3800), 0.012, 0.01, 0.05); // 偶爾的球鞋摩擦聲
     },
+    zhuStep(x, y, z) { // 竹竿穿拖鞋跑步：啪噠啪噠
+      if (!AU.ctx) return; const t = AU.ctx.currentTime, d = out(AU.sfx, x, y + 0.1, z, 0.35);
+      noiseHit(d, t, 'bandpass', rand(1500, 2300), 1.1, 0.5, 0.001, 0.035); noiseHit(d, t + 0.05, 'highpass', 2600, 0.8, 0.22, 0.001, 0.03); tone(d, t, 'sine', rand(95, 120), 60, 0.25, 0.003, 0.06);
+    },
     enemyStep(x, y, z, heavy) { if (!AU.ctx) return; const t = AU.ctx.currentTime; const d = out(AU.sfx, x, y + 0.2, z, 0.3); tone(d, t, 'sine', heavy ? 82 : 70, 40, 0.9, 0.005, 0.22); noiseHit(d, t, 'lowpass', 500, 1, 0.45, 0.003, 0.1); },
     gulp() { if (!AU.ctx) return; const t = AU.ctx.currentTime; const d = out(AU.sfx); for (let i = 0; i < 3; i++) { const tt = t + i * 0.45; tone(d, tt, 'sine', 210, 95, 0.16, 0.02, 0.18); noiseHit(d, tt + 0.05, 'bandpass', 650, 5, 0.05, 0.02, 0.1); } tone(d, t + 1.5, 'sine', 300, 240, 0.05, 0.03, 0.3); },
     // 扭曲男聲怒吼：聲門脈衝（鋸齒波＋低八度次諧波）→ 共振峰濾波（逐字切換母音）→ 失真 → 樓下的悶響與回音
@@ -664,6 +668,40 @@
   // 222 號房：潘柏翰（一開門就貼臉出現）
   loadTex(A.cig).then((t) => { TEX.cig = t; });
   loadTex(A.pan).then((t) => { panMesh = billboard(t, 1.76, 0x0c0c0c); panMesh.visible = false; });
+  // ---------- 竹竿：207 門前、走廊正中間站著不動；看得到他時玩家被迫用走的，靠近一點他就朝玩家跑過來、擦身而過跑掉（不會傷人）----------
+  const ZHU = { meshes: null, st: 'idle', slow: false };
+  Promise.all([A.zhu_stand, A.zhu_run1, A.zhu_run2].map((u) => loadTex(u))).then((ts) => { ZHU.meshes = ts.map((t) => { const m = billboard(t, 1.74, 0x0c0c0c); m.visible = false; return m; }); zhuReset(); });
+  function zhuReset() {
+    const d = DORM.doors.find((x) => x.no === 207); Object.assign(ZHU, { st: 'idle', slow: false, said: false, passed: false, t: 0, stepT: 0, wp: null, x: DORM.XS, z: d ? d.cz : -26.8 });
+    if (ZHU.meshes) ZHU.meshes.forEach((m) => { m.visible = false; });
+  }
+  let subT = 0;
+  function zhuSay(lines, i = 0) { // 邊跑邊講：字幕自己往下播，不用按、也不會停住玩家
+    const el = $('sub'); if (i >= lines.length) { el.classList.remove('show'); return; }
+    $('subName').textContent = '竹竿'; $('subText').textContent = lines[i][0]; el.classList.add('show');
+    clearTimeout(subT); subT = setTimeout(() => zhuSay(lines, i + 1), lines[i][1]);
+  }
+  function updateZhu(dt) {
+    if (!ZHU.meshes) return; const M = ZHU.meshes;
+    if (G.phase !== 'quest' || ZHU.st === 'gone') { M.forEach((m) => { m.visible = false; }); ZHU.slow = false; if (G.phase === 'chase' && ZHU.st === 'idle') ZHU.st = 'gone'; return; }
+    if (G.paused) return;
+    const F = DORM.F, d = Math.hypot(ZHU.x - P.x, ZHU.z - P.z), inCorr = P.y > 3 && Math.abs(P.x - DORM.XS) < 2.7 && P.z < 4.9;
+    const see = inCorr && world.los(P.x, P.y + 1.6, P.z, ZHU.x, F + 1.4, ZHU.z);
+    let frame = 0;
+    if (ZHU.st === 'idle') {
+      if (see && d < 15) ZHU.slow = true;
+      if (see && d < 8.5) { ZHU.st = 'run'; ZHU.side = P.x >= DORM.XS ? -1 : 1; }
+    } else {
+      ZHU.t += dt; frame = 1 + (Math.floor(ZHU.t / 0.15) % 2);
+      if (!ZHU.passed && ZHU.z >= P.z - 0.2) { ZHU.passed = true; ZHU.wp = [[clamp(ZHU.x, DORM.XS - 1.8, DORM.XS + 1.8), 9.6], [DORM.XS - 14, 10.2]]; }
+      let tx, tz; if (!ZHU.passed) { tx = clamp(P.x + ZHU.side * 0.95, DORM.XS - 2.1, DORM.XS + 2.1); tz = P.z + 0.5; } else { while (ZHU.wp.length && Math.hypot(ZHU.wp[0][0] - ZHU.x, ZHU.wp[0][1] - ZHU.z) < 0.4) ZHU.wp.shift(); if (!ZHU.wp.length) { ZHU.st = 'gone'; return; } [tx, tz] = ZHU.wp[0]; }
+      const vx = tx - ZHU.x, vz = tz - ZHU.z, L = Math.hypot(vx, vz) || 1, sp = 6.2 * dt; ZHU.x += vx / L * Math.min(sp, L + 0.6); ZHU.z += vz / L * Math.min(sp, L + 0.6);
+      if ((ZHU.stepT += dt) > 0.29) { ZHU.stepT = 0; try { SFX.zhuStep(ZHU.x, F, ZHU.z); } catch (e) { } }
+      if (!ZHU.said && d < 3.4) { ZHU.said = true; ZHU.slow = false; zhuSay([['乾，超黑的啦', 1900], ['發瘋', 1500]]); }
+      if (ZHU.passed && d > 17) { ZHU.st = 'gone'; return; }
+    }
+    M.forEach((m, k) => { m.visible = k === frame; if (k === frame) m.position.set(ZHU.x, F + (frame ? Math.abs(Math.sin(ZHU.t * 21)) * 0.05 : 0), ZHU.z); });
+  }
   function setFlash(on, silent) {
     P.light = on; flash.intensity = on ? FLASH_I : 0; flood.intensity = on ? FLOOD_I : 0; if (!on) flashSpill.intensity = 0;
     const el = $('flashState'); if (el) { el.textContent = on ? '開' : '關'; el.parentElement.classList.toggle('off', !on); }
@@ -924,7 +962,7 @@
     Object.assign(G, { phase: 'intro', paused: false, enemyDist: 99, chaseMix: 0, enemySpeedMul: 1, items: [], cur: -1, hold: 0, holding: false, questT: 0, hintShown: false, sips: 0, hits: 0, startTime: performance.now(), bed: null, target: null, shake: 0 });
     enemy.reset(); enemyMesh.visible = false; npcMesh.visible = true; npcMesh.position.set(npcPos.x, 0, npcPos.z); npcBox.on = true; doorBox.on = true;
     eSpot.intensity = 0; eGlow.intensity = 0; eSpot.color.setHex(0xff1410); stunMesh.visible = false;
-    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; if (panMesh) panMesh.visible = false;
+    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; if (panMesh) panMesh.visible = false; zhuReset(); $('sub').classList.remove('show');
     spawnItems(); renderSlots(); tvReset();
     for (const d of DOORS) { d.open = false; d.ang = 0; d.piv.rotation.y = d.base; d.box.on = true; }
     MAIN.open = false; MAIN.ang = 0; for (const l of MAIN.leaves) l.piv.rotation.y = 0;
@@ -1132,7 +1170,7 @@
   // ---------- 主迴圈 ----------
   let last = performance.now();
   function update(dt) {
-    updateDoors(dt); updatePan(dt);
+    updateDoors(dt); updatePan(dt); updateZhu(dt);
     if ((G.boostT || 0) > 0 && !G.paused && !dlgState) { G.boostT -= dt; if (G.boostT <= 0) toast('菸的效果退了', 1800); }
     const active = playable() && !G.paused && !dlgState;
     // 移動
@@ -1142,9 +1180,9 @@
       // 體力歸零 → 進入「力竭」：只能走路，要等體力回復到 35% 才能再跑
       if (P.stamina <= 0) P.exhausted = true;
       if (P.exhausted && P.stamina >= 35) P.exhausted = false;
-      P.running = !!(want && P.stamina > 0 && !P.exhausted);
+      P.running = !!(want && P.stamina > 0 && !P.exhausted && !ZHU.slow); // 看到竹竿時被迫用走的
       if (P.running) P.stamina = Math.max(0, P.stamina - 15 * dt); else P.stamina = Math.min(100, P.stamina + 10 * dt);
-      const sp = (P.running ? 5.0 : 2.3) * ((G.boostT || 0) > 0 ? 1.45 : 1);
+      const sp = (P.running ? 5.0 : 2.3) * ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1);
       if (moving) {
         const l = Math.hypot(mx, mz); mx /= l; mz /= l;
         const s = Math.sin(P.yaw), c = Math.cos(P.yaw);
@@ -1282,7 +1320,7 @@
     }
     // Billboard 面向鏡頭（只轉 Y 軸）
     const cx = camera.position.x, cz = camera.position.z;
-    for (const m of [npcMesh, enemyMesh, wheyMesh, potMesh, houMesh, panMesh, ...BAGS]) if (m && m.visible) m.rotation.y = Math.atan2(cx - m.position.x, cz - m.position.z);
+    for (const m of [npcMesh, enemyMesh, wheyMesh, potMesh, houMesh, panMesh, ...BAGS, ...(ZHU.meshes || [])]) if (m && m.visible) m.rotation.y = Math.atan2(cx - m.position.x, cz - m.position.z);
     for (const dr of DROPS) if (dr.mesh && dr.mesh.userData.drop) dr.mesh.rotation.y = Math.atan2(cx - dr.mesh.position.x, cz - dr.mesh.position.z);
     // 手上道具晃動
     ui.hand.style.visibility = P.hidden ? 'hidden' : '';
@@ -1316,5 +1354,5 @@
 
   // 測試用
   enemy.altVia = DORM.altVia; // 晒衣場室外樓梯頂端的平台（二樓浴廁旁）
-  window.__game = { camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
+  window.__game = { ZHU, camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
 })();

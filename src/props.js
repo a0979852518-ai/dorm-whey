@@ -75,6 +75,7 @@ function buildProps(DORM, scene) {
     sheet: P({ color: 0xdedbd2, shininess: 30 }),
     porcelainIn: P({ color: 0xe4e2da, shininess: 70, specular: 0x555555 }),
     sensor: P({ color: 0xd9d2bd, shininess: 40 }),
+    fridgeW: P({ color: 0xf2f2ee, shininess: 70, specular: 0x444444 }),
     acBody: P({ color: 0xe2e3de, shininess: 45, specular: 0x333333 }),
     acDark: P({ color: 0x1d2022, shininess: 10 }),
     acGrey: P({ color: 0xa9aca8, shininess: 30 }),
@@ -198,6 +199,18 @@ function buildProps(DORM, scene) {
     put('black', box(0.08, 0.035, 0.005), F, 0.03, 0.96, 0.071);
     put('c:' + 0x222222, cyl(0.003, 0.003, 0.22, 4), F, -0.07, 0.78, 0.012);
   };
+  // ---------- 白色小冰箱（門朝 +z 本地前方；上下兩門、直把手）----------
+  const fridge = (p) => {
+    const F = frame(p.x, p.y, p.z, p.ry), W = 0.5, D = 0.5, H = 0.86;
+    put('fridgeW', rbox(W, H - 0.03, D - 0.03, 0.03), F, 0, (H - 0.03) / 2 + 0.03, -0.015);
+    put('black', box(W - 0.06, 0.03, D - 0.06), F, 0, 0.015, 0);
+    put('fridgeW', rbox(W - 0.01, 0.2, 0.03, 0.012), F, 0, H - 0.13, D / 2 - 0.012);
+    put('fridgeW', rbox(W - 0.01, H - 0.29, 0.03, 0.012), F, 0, 0.06 + (H - 0.29) / 2, D / 2 - 0.012);
+    put('gray', box(W - 0.03, 0.006, 0.006), F, 0, H - 0.235, D / 2 + 0.002);
+    put('gray', rbox(0.025, 0.14, 0.03, 0.008), F, W / 2 - 0.06, H - 0.13, D / 2 + 0.02);
+    put('gray', rbox(0.025, 0.3, 0.03, 0.008), F, W / 2 - 0.06, 0.5, D / 2 + 0.02);
+    put('lcd', box(0.06, 0.02, 0.004), F, -W / 2 + 0.08, H - 0.06, D / 2 + 0.004);
+  };
   // ---------- 冷氣室外機：白色機殼、左邊圓形風扇護網、右邊散熱百葉；掛牆的有 L 型鐵架與保溫管 ----------
   const acUnit = (p) => {
     const W = p.z1 - p.z0, D = p.x1 - p.x0, H = p.y1 - p.y0, wall = p.y0 > 0.5;
@@ -245,7 +258,7 @@ function buildProps(DORM, scene) {
     else if (p.k === 'disp') dispenser(p); else if (p.k === 'squat') squat(p); else if (p.k === 'washer') washer(p);
     else if (p.k === 'pipe') { const g = cyl(p.r, p.r, p.z1 - p.z0, 10); g.rotateX(Math.PI / 2); put('conduit', g, frame(p.x, p.y, (p.z0 + p.z1) / 2), 0, 0, 0); }
     else if (p.k === 'tube') { const len = p.ax === 'x' ? p.x1 - p.x0 : p.ax === 'y' ? p.y1 - p.y0 : p.z1 - p.z0, g = cyl(p.r, p.r, len, 8); if (p.ax === 'x') g.rotateZ(Math.PI / 2); if (p.ax === 'z') g.rotateX(Math.PI / 2); put('c:' + p.c, g, frame((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2, (p.z0 + p.z1) / 2), 0, 0, 0); }
-    else if (p.k === 'ac') acUnit(p);
+    else if (p.k === 'ac') acUnit(p); else if (p.k === 'fridge') fridge(p);
     else if (p.k === 'cable') cable(p); else if (p.k === 'urinal') urinal(p);
     else if (p.k === 'grass') grass(p); else if (p.k === 'clothesline') clothesline(p);
   }

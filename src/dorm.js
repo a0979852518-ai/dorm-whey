@@ -3,9 +3,9 @@
 // 一樓：大廳（沙發區、宿管室、上鎖的房間）＋西側走道＋西南角樓梯（斜向梯段→中間平台→沿西牆上二樓；往三樓的梯段用空氣牆擋住）
 // 二樓：樓梯上來是交誼廳（北側大陽台、南側落地窗與沙發區）→ 東端左轉走廊 → 北端浴室廁所
 // 有細緻模型（props）的物件：方塊只當碰撞、不畫出來
-const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|浴廁_小便斗(?!區)|浴廁_感應器|中庭_冷氣室外機)/;
+const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|浴廁_小便斗(?!區)|浴廁_感應器|中庭_冷氣室外機|_小冰箱)/;
 export function buildDorm() {
-  const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [], props = []; // props：細緻模型（main 用 props.js 畫；方塊只留碰撞，見 NO_DRAW）
+  const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [], props = [], notes = []; // props：細緻模型（main 用 props.js 畫；方塊只留碰撞，見 NO_DRAW）
   const F = 3.35, H2 = F + 4.0, F3 = H2 + 0.2, TOP = F3 + 3.0; // 二樓地坪、二樓天花板、三樓地坪、樓梯間頂
   const C = {
     wall: 0xcbc0aa, wallR: 0xbab4ad, wallL: 0xc4bcae, floorR: 0x9a9287, corr: 0x6a6258, slab: 0x777b7d, ceil: 0x2c2a26, skirt: 0x161412,
@@ -327,7 +327,7 @@ export function buildDorm() {
   }
   for (let z = ZR0 + 3.3; z < ZEND; z += 6.6) D_('走廊_橫樑', -XC, XC, z - 0.2, z + 0.2, H2 - 0.35, H2, C.wall);
   for (let z = ZR0 + 5; z < ZEND; z += 6.6) D_('日光燈', -0.14, 0.14, z - 0.62, z + 0.62, H2 - 0.42, H2 - 0.33, C.lamp);
-  const rooms = [];
+  const rooms = [], noteAt = new Map(); // noteAt：門旁告示框改放在門右手邊、夾手寫紙的房間（門中心 z → 紙上的字）
   const DW = 1.0, DH = F + 2.08, LT = F + 2.16, WL0 = F + 2.55, WL1 = F + 3.15; // 門寬、門高、門框上緣、高窗上下緣
   const corridorWall = (s, z0, z1, centers) => { // centers：門中心 z
     const x = s * (XC + WT / 2), xf = s * XC; // 牆中心、走廊側牆面
@@ -346,7 +346,9 @@ export function buildDorm() {
       for (const zz of [c - 1.1, c - 0.03, c + 1.04]) D_('走廊_高窗框', x - WT / 2 - 0.015, x + WT / 2 + 0.015, zz, zz + 0.07, WL0, WL1, C.frame);
       for (const yy of [WL0, WL1 - 0.06]) D_('走廊_高窗框', x - WT / 2 - 0.015, x + WT / 2 + 0.015, c - 1.1, c + 1.1, yy, yy + 0.06, C.frame);
       // 門旁的告示框
-      const nz = c + DW / 2 + 0.45; D_('走廊_告示框', xf - s * 0.025, xf, nz, nz + 0.32, F + 1.3, F + 1.75, C.frame); D_('走廊_告示紙', xf - s * 0.03, xf - s * 0.025, nz + 0.03, nz + 0.29, F + 1.33, F + 1.72, C.paper);
+      const note = noteAt.get(c), nz = note ? (s < 0 ? c - DW / 2 - 0.45 - 0.32 : c + DW / 2 + 0.45) : c + DW / 2 + 0.45; // 站在走廊面對門：西排右手邊是北（-z）
+      D_('走廊_告示框', xf - s * 0.025, xf, nz, nz + 0.32, F + 1.3, F + 1.75, C.frame); D_('走廊_告示紙', xf - s * 0.03, xf - s * 0.025, nz + 0.03, nz + 0.29, F + 1.33, F + 1.72, C.paper);
+      if (note) notes.push({ x: xf - s * 0.042, y: F + 1.525, z: nz + 0.16, ry: s < 0 ? Math.PI / 2 : -Math.PI / 2, w: 0.25, h: 0.38, t: note });
     }
   };
   const room = (s, i, no) => {
@@ -370,12 +372,18 @@ export function buildDorm() {
     D_(tag + '冷氣', X(D - 0.25), X(D), zc - 0.45, zc + 0.45, F + 2.75, F + 3.05, 0xeeeeea);
     // 門（在寢室正中間）：門框上緣＝門牌位置；門扇可開關（預設關著）
     S_(tag + '門框上緣', s * XC, s * (XC + WT), zc - DW / 2, zc + DW / 2, DH, LT, C.frame);
-    doors.push({ room: tag.slice(0, -1), no, hx: s * (XC + WT / 2), hz: zc + DW / 2, cx: s * (XC + WT / 2), cz: zc, axis: 'z', openAng: -s * Math.PI / 2 * 0.95, len: DW - 0.02, y0: F + 0.01, y1: DH - 0.01, s, zc });
+    if (no === 224) noteAt.set(zc, '莫須有'); // 224：白色鐵門、門右手邊的告示框夾一張手寫「莫須有」
+    doors.push({ iron: no === 224, room: tag.slice(0, -1), no, hx: s * (XC + WT / 2), hz: zc + DW / 2, cx: s * (XC + WT / 2), cz: zc, axis: 'z', openAng: -s * Math.PI / 2 * 0.95, len: DW - 0.02, y0: F + 0.01, y1: DH - 0.01, s, zc });
     // 入口區（進門後約一張床長的空間）：側邊鞋櫃、門旁穿衣鏡
     S_(tag + '鞋櫃', X(0.25), X(1.85), z0 + 0.08, z0 + 0.43, F, F + 1.0, BW_);
     D_(tag + '鞋櫃門縫', X(1.04), X(1.06), z0 + 0.43, z0 + 0.44, F + 0.05, F + 0.95, 0xb0b0aa);
     D_(tag + '鏡框', X(0), X(0.03), zc + DW / 2 + 0.15, zc + DW / 2 + 0.75, F + 0.35, F + 1.95, 0x9a9c9a); D_(tag + '鏡子', X(0.03), X(0.04), zc + DW / 2 + 0.19, zc + DW / 2 + 0.71, F + 0.39, F + 1.91, C.mirror);
     S_(tag + '鞋櫃', X(0.25), X(1.85), z1 - 0.43, z1 - 0.08, F, F + 1.0, BW_);
+    if (no === 224) { // 進門右手邊（西排面朝房內右手是北）的白色小冰箱，緊貼鞋櫃旁
+      const fz0 = s < 0 ? z0 + 0.1 : z1 - 0.6, fa = 1.95, fb = 2.47;
+      S_(tag + '小冰箱', Math.min(X(fa), X(fb)), Math.max(X(fa), X(fb)), fz0, fz0 + 0.5, F, F + 0.86, 0xf0f0ec);
+      props.push({ k: 'fridge', x: X((fa + fb) / 2), z: fz0 + 0.25, y: F, ry: s < 0 ? 0 : Math.PI });
+    }
     // 上舖下桌（參考照片）：同一面牆兩張床頭尾相接；床下櫃子連著櫃子（門口端書桌＋書架 → 衣櫃 → 衣櫃 → 窗邊書桌）；
     // 兩張床中間共用一片隔板、一個斜靠的灰色鐵梯（上端彎鉤）；白色床箱、灰色方管床架
     const DJ = 5.45, beds = [[3.3, DJ, 'door'], [DJ, 7.6, 'win']];
@@ -705,6 +713,7 @@ export function buildDorm() {
   for (const r of rooms) { const oX = r.X; r.X = (d) => oX(d) + XS; r.cx += XS; }
   for (const o of [tv, remote, hou]) if (o) o.x = mx(o.x, C2);
   for (const bg of bags) bg[1] += XS;
+  for (const nt of notes) nt.x = mx(nt.x, C2);
   for (const p of props) { const c = p.y > 3 ? C2 : C1; if (p.x !== undefined) p.x = mx(p.x, c); if (p.x0 !== undefined) { if (p.x0 >= c) { p.x0 += XS; p.x1 += XS; } else if (p.x1 > c) p.x1 += XS; } }
   // 晒衣場：草地、曬衣桿（木樁＋鐵鍊）用最終座標從方塊取出
   for (const b of deco) if (b.n === '中庭_草地') props.push({ k: 'grass', x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, y: 0 });
@@ -743,7 +752,7 @@ export function buildDorm() {
     if (m < r * 6) continue; props.push({ k: 'tube', ax: 'xyz'[ai], x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, r, c: b.c }); b.noDraw = true;
   }
   return {
-    solid, deco, spots, patrol, lights, signs, props, NO_DRAW, terrazzo, diag, rots, prisms, doors, beams, tplanes, sprisms, fogs, extra, tv, remote, hou, bags, rooms,
+    notes, solid, deco, spots, patrol, lights, signs, props, NO_DRAW, terrazzo, diag, rots, prisms, doors, beams, tplanes, sprisms, fogs, extra, tv, remote, hou, bags, rooms,
     F, H2, DOOR: { ...DOOR, z: ZB }, spawn: { x: DOOR.x, y: 0, z: ZB - 0.9 }, npc: { x: DOOR.x, y: 0, z: ZB - 3.2 },
     bathZ: ZR0, wheyDesk: '二樓_208房_書桌1', XS, altVia: { x: -13.4 + XS, y: F, z: ZR0 + 1.6 },
     exitSign: { x: DOOR.x, y: 2.78, z: ZB - 0.02 }, outside: { x: DOOR.x, z: ZB + 5, w: 14, d: 10 },

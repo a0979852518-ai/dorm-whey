@@ -150,6 +150,19 @@
       else { g.fillStyle = '#1b2224'; g.fillRect(0, 0, 256, 112); g.strokeStyle = sg.c; g.lineWidth = 6; g.strokeRect(6, 6, 244, 100); g.fillStyle = sg.c; g.font = '900 58px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(sg.t, 128, 58); }
       const tx = new THREE.CanvasTexture(c); tx.encoding = THREE.sRGBEncoding; const m = new THREE.Mesh(new THREE.PlaneGeometry(sg.w || 1.1, sg.h || 0.48), new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, map: tx })); m.position.set(sg.x, sg.y, sg.z); m.rotation.y = sg.ry; scene.add(m);
     }
+    // 手寫的紙（夾在告示框裡）：每個字大小、角度、位置都有點歪，筆畫粗細不一，像麥克筆寫的
+    for (const nt of DORM.notes || []) {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 390; const g = c.getContext('2d');
+      g.fillStyle = '#f3f1e8'; g.fillRect(0, 0, 256, 390); g.fillStyle = 'rgba(120,110,80,0.08)'; for (let i = 0; i < 40; i++) g.fillRect(Math.random() * 256, Math.random() * 390, 30 + Math.random() * 60, 1);
+      g.strokeStyle = 'rgba(150,170,200,0.35)'; g.lineWidth = 1; for (let y = 40; y < 390; y += 34) { g.beginPath(); g.moveTo(10, y); g.lineTo(246, y); g.stroke(); }
+      const chars = [...nt.t], step = 330 / chars.length;
+      chars.forEach((ch, i) => { g.save(); g.translate(128 + (Math.random() - 0.5) * 18, 50 + step * (i + 0.5) + (Math.random() - 0.5) * 8); g.rotate((Math.random() - 0.5) * 0.22); g.scale(1 + (Math.random() - 0.5) * 0.15, 1 + (Math.random() - 0.5) * 0.12);
+        g.font = '900 104px "Noto Sans TC", "Microsoft JhengHei", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineCap = 'round';
+        g.strokeStyle = '#141414'; g.lineWidth = 7; g.strokeText(ch, 0, 0); g.fillStyle = '#141414'; g.fillText(ch, 0, 0);
+        g.globalCompositeOperation = 'destination-out'; g.fillStyle = 'rgba(0,0,0,0.25)'; for (let k = 0; k < 18; k++) g.fillRect((Math.random() - 0.5) * 110, (Math.random() - 0.5) * 110, 2 + Math.random() * 5, 1 + Math.random() * 2); g.restore(); });
+      const tx = new THREE.CanvasTexture(c); tx.encoding = THREE.sRGBEncoding; tx.anisotropy = 4;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(nt.w, nt.h), new THREE.MeshPhongMaterial({ shininess: 4, map: tx })); m.position.set(nt.x, nt.y, nt.z); m.rotation.set(0, nt.ry, 0.04); scene.add(m);
+    }
     // 門外地面
     const o = DORM.outside; const og = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.d), new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, color: 0x15171a }));
     og.rotation.x = -Math.PI / 2; og.position.set(o.x, -0.01, o.z); og.receiveShadow = true; scene.add(og);
@@ -237,8 +250,13 @@
   // 寢室門：預設關著，按 F 開關；他經過時會自己推開
   const DOORS = DORM.doors.map((d) => {
     d.base = d.axis === 'x' ? Math.PI / 2 : 0; const piv = new THREE.Group(); piv.position.set(d.hx, d.y0, d.hz); piv.rotation.y = d.base;
-    const h = d.y1 - d.y0, mat = new THREE.MeshPhongMaterial({ shininess: 10, specular: 0x111111, color: 0xb7a388 });
+    const h = d.y1 - d.y0, mat = d.iron ? new THREE.MeshPhongMaterial({ shininess: 70, specular: 0x555555, color: 0xe9e9e4 }) : new THREE.MeshPhongMaterial({ shininess: 10, specular: 0x111111, color: 0xb7a388 }); // 224 是白色鐵門
     const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.045, h, d.len), mat); leaf.position.set(0, h / 2, -d.len / 2); leaf.castShadow = leaf.receiveShadow = true; piv.add(leaf);
+    if (d.iron) { // 鐵門的壓紋：上下兩塊凸起的方框、門下緣的踢板
+      const pm = new THREE.MeshPhongMaterial({ shininess: 70, specular: 0x555555, color: 0xdedfd9 });
+      for (const [y0, y1] of [[0.18, 0.9], [1.15, h - 0.18]]) for (const sx of [-1, 1]) { const pnl = new THREE.Mesh(new THREE.BoxGeometry(0.012, y1 - y0, d.len - 0.24), pm); pnl.position.set(sx * 0.028, (y0 + y1) / 2, -d.len / 2); piv.add(pnl); }
+      for (const sx of [-1, 1]) { const kp = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.12, d.len - 0.04), new THREE.MeshPhongMaterial({ color: 0x9a9c9a, shininess: 80, specular: 0x777777 })); kp.position.set(sx * 0.026, 0.07, -d.len / 2); piv.add(kp); }
+    }
     for (const sx of [-1, 1]) { const hd = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.12), new THREE.MeshPhongMaterial({ color: 0xb8b8b0, shininess: 60, specular: 0x666666 })); hd.position.set(sx * 0.045, 0.98, -d.len + 0.12); piv.add(hd); }
     scene.add(piv);
     const box = d.axis === 'x' ? { n: 'roomdoor', x0: d.hx - d.len, x1: d.hx, z0: d.hz - 0.05, z1: d.hz + 0.05, y0: d.y0, y1: d.y1, on: true, sight: true } : { n: 'roomdoor', x0: d.hx - 0.05, x1: d.hx + 0.05, z0: d.hz - d.len, z1: d.hz, y0: d.y0, y1: d.y1, on: true, sight: true };

@@ -318,7 +318,7 @@
     for (const k of ['amb', 'horror', 'chase', 'hb', 'sfx']) { AU[k] = C.createGain(); AU[k].connect(AU.master); }
     AU.horror.gain.value = 0; AU.chase.gain.value = 0; AU.hb.gain.value = 0;
     AU.noise = noiseBuf(C, 2);
-    AU.voice = {}; for (const k of ['roar1', 'roar2', 'c_huan', 'c_bie', 'c_zhan', 'c_ah', 'c_ruqing', 'bgm_chase', 'chase_loop', 'breath']) { try { C.decodeAudioData(b64ToAB(A[k]), (buf) => { AU.voice[k] = buf; }, () => { }); } catch (e) { } }
+    AU.voice = {}; for (const k of ['roar1', 'roar2', 'c_huan', 'c_bie', 'c_zhan', 'c_ah', 'c_ruqing', 'bgm_chase', 'chase_loop', 'breath', 'step_soft', 'step_hard', 'step_heavy']) { try { C.decodeAudioData(b64ToAB(A[k]), (buf) => { AU.voice[k] = buf; }, () => { }); } catch (e) { } }
     // 環境低鳴
     const lp = C.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 150; const ag = C.createGain(); ag.gain.value = 0.07; lp.connect(ag); ag.connect(AU.amb);
     for (const f of [41.2, 41.75, 61.9]) { const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(); }
@@ -345,12 +345,31 @@
     if (revAmt) { const r = C.createGain(); r.gain.value = revAmt; g.connect(r); r.connect(AU.rev); }
     return g;
   }
+  // 腳步聲錄音：每個檔是 8 個腳步排在一起（每格 SLOT 秒、開頭 0.05 秒留白），隨機挑一格播
+  const STEP_SLOT = { step_soft: 0.47, step_hard: 0.35, step_heavy: 0.65 };
+  function playStep(key, dest, gain, rate, lowpass) {
+    const C = AU.ctx, buf = AU.voice && AU.voice[key]; if (!C || !buf) return false;
+    const L = STEP_SLOT[key], n = Math.max(1, Math.floor(buf.duration / L + 0.01)), k = (Math.random() * n) | 0;
+    const s = C.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; const g = C.createGain(); g.gain.value = gain;
+    let node = s; if (lowpass) { const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; s.connect(f); node = f; }
+    node.connect(g); g.connect(dest); s.start(C.currentTime, k * L + 0.03, L - 0.03); return true;
+  }
   function env(g, t, a, peak, d) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
   function noiseHit(dest, t, type, f, q, peak, a, d) { const C = AU.ctx; const s = C.createBufferSource(); s.buffer = AU.noise; const b = C.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; const g = C.createGain(); env(g, t, a, peak, d); s.connect(b); b.connect(g); g.connect(dest); s.start(t, Math.random()); s.stop(t + a + d + 0.05); return b; }
   function tone(dest, t, type, f0, f1, peak, a, d) { const C = AU.ctx; const o = C.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + a + d); const g = C.createGain(); env(g, t, a, peak, d); o.connect(g); g.connect(dest); o.start(t); o.stop(t + a + d + 0.05); return o; }
   const SFX = {
     step(run, stair, inRoom, land) {
       if (!AU.ctx) return; const C = AU.ctx, t = C.currentTime; const tile = P.z < DORM.bathZ && P.y > 3;
+      { // 真實錄音的腳步聲（使用者提供）：浴廁磁磚 → 硬底清脆的；寢室 → 悶一點；晒衣場草地 → 很悶很小聲；其他（磨石子走廊、大廳、樓梯）→ 一般室內腳步；跳下落地 → 重的
+        const yard = P.y < 1 && P.z < -0.8 && P.x > -24.5, set = land ? 'step_heavy' : tile ? 'step_hard' : 'step_soft';
+        const d = out(AU.sfx, undefined, 0, 0, tile ? 0.5 : inRoom ? 0.25 : yard ? 0.05 : 0.2);
+        const g = (land ? 0.7 : run ? 0.5 : 0.32) * rand(0.85, 1.1) * (yard ? 0.55 : 1);
+        if (playStep(set, d, g, (run ? 1.08 : 1) * rand(0.95, 1.05), yard ? 700 : inRoom ? 3200 : 0)) {
+          if (stair) tone(d, t, 'triangle', rand(160, 190), 120, g * 0.12, 0.003, 0.1); // 樓梯的空心感
+          if (yard) noiseHit(d, t + 0.01, 'bandpass', rand(2500, 3500), 0.8, g * 0.08, 0.01, 0.08); // 踩草的沙沙聲
+          return;
+        }
+      }
       const d = out(AU.sfx, undefined, 0, 0, tile ? 0.5 : inRoom ? 0.3 : 0.18);
       const g = (run ? 0.34 : 0.2) * rand(0.85, 1.12) * (land ? 1.4 : 1);
       tone(d, t, 'sine', rand(82, 98), 48, g, 0.004, run ? 0.08 : 0.1);                                // 鞋跟落地的悶響
@@ -364,7 +383,7 @@
       if (!AU.ctx) return; const t = AU.ctx.currentTime, d = out(AU.sfx, x, y + 0.1, z, 0.35);
       noiseHit(d, t, 'bandpass', rand(1500, 2300), 1.1, 0.5, 0.001, 0.035); noiseHit(d, t + 0.05, 'highpass', 2600, 0.8, 0.22, 0.001, 0.03); tone(d, t, 'sine', rand(95, 120), 60, 0.25, 0.003, 0.06);
     },
-    enemyStep(x, y, z, heavy) { if (!AU.ctx) return; const t = AU.ctx.currentTime; const d = out(AU.sfx, x, y + 0.2, z, 0.3); tone(d, t, 'sine', heavy ? 82 : 70, 40, 0.9, 0.005, 0.22); noiseHit(d, t, 'lowpass', 500, 1, 0.45, 0.003, 0.1); },
+    enemyStep(x, y, z, heavy) { if (!AU.ctx) return; const t = AU.ctx.currentTime; const d = out(AU.sfx, x, y + 0.2, z, 0.3); if (playStep('step_heavy', d, heavy ? 1.1 : 0.85, rand(0.86, 0.94), 0)) { tone(d, t, 'sine', heavy ? 70 : 62, 40, 0.35, 0.005, 0.18); return; } tone(d, t, 'sine', heavy ? 82 : 70, 40, 0.9, 0.005, 0.22); noiseHit(d, t, 'lowpass', 500, 1, 0.45, 0.003, 0.1); },
     gulp() { if (!AU.ctx) return; const t = AU.ctx.currentTime; const d = out(AU.sfx); for (let i = 0; i < 3; i++) { const tt = t + i * 0.45; tone(d, tt, 'sine', 210, 95, 0.16, 0.02, 0.18); noiseHit(d, tt + 0.05, 'bandpass', 650, 5, 0.05, 0.02, 0.1); } tone(d, t + 1.5, 'sine', 300, 240, 0.05, 0.03, 0.3); },
     // 扭曲男聲怒吼：聲門脈衝（鋸齒波＋低八度次諧波）→ 共振峰濾波（逐字切換母音）→ 失真 → 樓下的悶響與回音
     // 喊話：真人錄音拼成的吼叫。直達聲＋早期反射都放在他的位置（不是廣播），

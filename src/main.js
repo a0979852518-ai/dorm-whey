@@ -668,11 +668,12 @@
   // 222 號房：潘柏翰（一開門就貼臉出現）
   loadTex(A.cig).then((t) => { TEX.cig = t; });
   loadTex(A.pan).then((t) => { panMesh = billboard(t, 1.76, 0x0c0c0c); panMesh.visible = false; });
-  // ---------- 竹竿：207 門前、走廊正中間站著不動；看得到他時玩家被迫用走的，靠近一點他就朝玩家跑過來、擦身而過跑掉（不會傷人）----------
+  // ---------- 竹竿：222 和 210 門前、走廊正中間站著不動；看得到他時玩家被迫用走的，靠近一點他就朝玩家跑過來、擦身而過跑掉（不會傷人）----------
   const ZHU = { meshes: null, st: 'idle', slow: false };
   Promise.all([A.zhu_stand, A.zhu_run1, A.zhu_run2].map((u) => loadTex(u))).then((ts) => { ZHU.meshes = ts.map((t) => { const m = billboard(t, 1.74, 0x0c0c0c); m.visible = false; return m; }); zhuReset(); });
   function zhuReset() {
-    const d = DORM.doors.find((x) => x.no === 207); Object.assign(ZHU, { st: 'idle', slow: false, said: false, passed: false, t: 0, stepT: 0, wp: null, x: DORM.XS, z: d ? d.cz : -26.8 });
+    const da = DORM.doors.find((x) => x.no === 222), db = DORM.doors.find((x) => x.no === 210); // 站在 222 和 210 門口中間
+    Object.assign(ZHU, { st: 'idle', slow: false, said: false, passed: false, t: 0, stepT: 0, wp: null, x: DORM.XS, z: da && db ? (da.cz + db.cz) / 2 : -18.8 });
     if (ZHU.meshes) ZHU.meshes.forEach((m) => { m.visible = false; });
   }
   let subT = 0;

@@ -2,8 +2,10 @@
 // 座標：x 右（東）、y 上、z 前（南，朝大門）。二樓走廊中心線 x = 0。
 // 一樓：大廳（沙發區、宿管室、上鎖的房間）＋西側走道＋西南角樓梯（斜向梯段→中間平台→沿西牆上二樓；往三樓的梯段用空氣牆擋住）
 // 二樓：樓梯上來是交誼廳（北側大陽台、南側落地窗與沙發區）→ 東端左轉走廊 → 北端浴室廁所
+// 有細緻模型（props）的物件：方塊只當碰撞、不畫出來
+const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|走廊_管線)/;
 export function buildDorm() {
-  const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [];
+  const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [], props = []; // props：細緻模型（main 用 props.js 畫；方塊只留碰撞，見 NO_DRAW）
   const F = 3.35, H2 = F + 3.6, F3 = H2 + 0.2, TOP = F3 + 3.0; // 二樓地坪、二樓天花板、三樓地坪、樓梯間頂
   const C = {
     wall: 0xcbc0aa, wallR: 0xbab4ad, wallL: 0xc4bcae, floorR: 0x9a9287, corr: 0x6a6258, slab: 0x777b7d, ceil: 0x2c2a26, skirt: 0x161412,
@@ -124,7 +126,7 @@ export function buildDorm() {
   // 大廳沙發區（照片：黃色皮沙發、木頭茶几＋玻璃桌面；北牆那個方框是電腦桌）
   const YEL = 0xd99a2b, YELD = 0xc0841f, CHR = 0xb8bab8;
   const lsofa = (x0, x1, z0, z1, back) => { // back：'N' | 'W' | 'E'
-    const yb = 0.12;
+    const yb = 0.12; props.push({ k: 'leather', x0, x1, z0, z1, back, y: 0, arm: 0.18, bt: 0.22 });
     S_('大廳_沙發座', x0, x1, z0, z1, yb, 0.45, YEL);
     if (back === 'N') { S_('大廳_沙發背', x0, x1, z0 - 0.22, z0, yb, 0.88, YELD); S_('大廳_沙發扶手', x0 - 0.18, x0, z0 - 0.22, z1, yb, 0.66, YELD); S_('大廳_沙發扶手', x1, x1 + 0.18, z0 - 0.22, z1, yb, 0.66, YELD); }
     if (back === 'W') { S_('大廳_沙發背', x0 - 0.22, x0, z0, z1, yb, 0.88, YELD); S_('大廳_沙發扶手', x0 - 0.22, x1, z0 - 0.18, z0, yb, 0.66, YELD); S_('大廳_沙發扶手', x0 - 0.22, x1, z1, z1 + 0.18, yb, 0.66, YELD); }
@@ -137,6 +139,7 @@ export function buildDorm() {
   lsofa(X1(1007) + 0.22, X1(1050), Z1(940) + SOF, Z1(1025) + SOF, 'W');
   lsofa(X1(1245), X1(1297) - 0.22, Z1(940) + SOF, Z1(1025) + SOF, 'E');
   { const tx = (X1(1085) + X1(1220)) / 2, tz = (Z1(932) + Z1(1025)) / 2 + SOF;
+    props.push({ k: 'lobbyTable', x: tx, z: tz, y: 0 });
     S_('大廳_茶几', tx - 0.75, tx + 0.75, tz - 0.4, tz + 0.4, 0, 0.42, 0x5a2e1e); D_('大廳_茶几玻璃', tx - 0.75, tx + 0.75, tz - 0.4, tz + 0.4, 0.42, 0.44, 0x8fa6a2);
     D_('大廳_桌巾', tx - 0.45, tx + 0.45, tz - 0.42, tz + 0.42, 0.44, 0.445, 0xe8e6de);
     D_('大廳_盆栽', tx - 0.08, tx + 0.08, tz - 0.08, tz + 0.08, 0.445, 0.6, 0x222222); D_('大廳_盆栽葉', tx - 0.16, tx + 0.16, tz - 0.16, tz + 0.16, 0.6, 0.85, 0x3d5a2a); }
@@ -281,8 +284,10 @@ export function buildDorm() {
   for (const [x0, x1, z] of [[XW, XBAL0, ZN1], [XBAL1, -XC, ZN1], [XPROT0, XPROT1, ZC]]) D_('交誼廳_踢腳板', x0, x1, z - 0.02, z + 0.02, F, F + 0.2, C.skirt);
   // 沙發區（照片：三張藤編沙發圍著玻璃茶几；電視掛在靠上樓樓梯那側的西牆）
   const TX = XPROT0 + 4.9, TZ = (ZB + ZC) / 2;
+  props.push({ k: 'rattanTable', x: TX, z: TZ, y: F });
   S_('交誼廳_茶几', TX - 0.7, TX + 0.7, TZ - 0.4, TZ + 0.4, F, F + 0.4, C.rattan); D_('交誼廳_茶几玻璃', TX - 0.7, TX + 0.7, TZ - 0.4, TZ + 0.4, F + 0.4, F + 0.45, C.glassT);
   const sofa = (n_, x0, x1, z0, z1, back) => {
+    props.push({ k: 'rattan', x0, x1, z0, z1, back, y: F, arm: 0.15, bt: 0.22 });
     S_(n_ + '座', x0, x1, z0, z1, F, F + 0.42, C.rattan);
     if (back === 'E') { S_(n_ + '背', x1, x1 + 0.22, z0 - 0.15, z1 + 0.15, F, F + 0.88, C.rattanD); S_(n_ + '扶手', x0, x1 + 0.22, z0 - 0.15, z0, F, F + 0.62, C.rattanD); S_(n_ + '扶手', x0, x1 + 0.22, z1, z1 + 0.15, F, F + 0.62, C.rattanD); }
     if (back === 'N') { S_(n_ + '背', x0 - 0.15, x1 + 0.15, z0 - 0.22, z0, F, F + 0.88, C.rattanD); S_(n_ + '扶手', x0 - 0.15, x0, z0 - 0.22, z1, F, F + 0.62, C.rattanD); S_(n_ + '扶手', x1, x1 + 0.15, z0 - 0.22, z1, F, F + 0.62, C.rattanD); }
@@ -295,7 +300,8 @@ export function buildDorm() {
   S_('交誼廳_電視', XPROT0, XPROT0 + 0.06, tv.z - 0.88, tv.z + 0.88, tv.y - 0.51, tv.y + 0.51, C.tv);
   D_('交誼廳_電視線', XPROT0 + 0.01, XPROT0 + 0.03, tv.z - 0.4, tv.z - 0.38, tv.y - 1.3, tv.y - 0.5, C.black); D_('交誼廳_插座', XPROT0, XPROT0 + 0.03, tv.z + 0.9, tv.z + 1.0, F + 0.3, F + 0.42, C.white);
   const remote = { x: TX + 0.25, y: F + 0.452, z: TZ - 0.05 };
-  S_('交誼廳_飲水機', XPROT1 - 0.48, XPROT1, ZC - 0.9, ZC - 0.42, F, F + 1.3, C.disp); D_('交誼廳_飲水機面板', XPROT1 - 0.5, XPROT1 - 0.48, ZC - 0.85, ZC - 0.47, F + 0.95, F + 1.2, C.black);
+  props.push({ k: 'disp', x0: XPROT1 - 1.15, x1: XPROT1 - 0.7, z0: ZC - 0.5, z1: ZC - 0.02, y: F, face: 'N' }); // 貼南牆、朝北
+  S_('交誼廳_飲水機', XPROT1 - 1.15, XPROT1 - 0.7, ZC - 0.5, ZC - 0.02, F, F + 1.3, C.disp);
   extinguisher(XPROT0, ZC - 0.6, F, 1); extinguisher(XPROT0, ZC - 0.9, F, 1);
   D_('交誼廳_吊扇座', TX + 1.6 - 0.06, TX + 1.6 + 0.06, TZ - 0.06, TZ + 0.06, H2 - 0.55, H2, C.white);
   D_('交誼廳_吊扇', TX + 1.6 - 0.32, TX + 1.6 + 0.32, TZ - 0.05, TZ + 0.05, H2 - 0.7, H2 - 0.5, C.white); D_('交誼廳_吊扇', TX + 1.6 - 0.05, TX + 1.6 + 0.05, TZ - 0.32, TZ + 0.32, H2 - 0.7, H2 - 0.5, C.white);
@@ -314,6 +320,7 @@ export function buildDorm() {
     D_('走廊_線槽', sx * (XC - 0.08), sx * (XC - 0.5), ZR0, ZEND, H2 - 0.48, H2 - 0.44, C.tray);
     for (let z = ZR0 + 0.5; z < ZEND; z += 1.6) D_('走廊_線槽吊桿', sx * (XC - 0.3) - 0.01, sx * (XC - 0.3) + 0.01, z, z + 0.02, H2 - 0.44, H2, C.tray);
     for (const dx of [0.12, 0.22, 0.32, 0.42]) D_('走廊_管線', sx * (XC - dx) - 0.025, sx * (XC - dx) + 0.025, ZR0, ZEND, H2 - 0.43, H2 - 0.38, C.pipe);
+    for (const dx of [0.12, 0.22, 0.32, 0.42]) props.push({ k: 'pipe', x: sx * (XC - dx), y: H2 - 0.405, z0: ZR0, z1: ZEND, r: 0.024 });
   }
   for (let z = ZR0 + 3.3; z < ZEND; z += 6.6) D_('走廊_橫樑', -XC, XC, z - 0.2, z + 0.2, H2 - 0.35, H2, C.wall);
   for (let z = ZR0 + 5; z < ZEND; z += 6.6) D_('日光燈', -0.14, 0.14, z - 0.62, z + 0.62, H2 - 0.42, H2 - 0.33, C.lamp);
@@ -502,6 +509,7 @@ export function buildDorm() {
       const z0 = CZ0 + k * L, z1 = z0 + L, zm = (z0 + z1) / 2, F2 = F + PH;
       if (toilet) { // 蹲式馬桶
         const p0 = back - dir * 0.22, p1 = back - dir * 0.82;
+        props.push({ k: 'squat', x: (p0 + p1) / 2, z: zm, y: F2, dir });
         D_('浴廁_蹲式馬桶', Math.min(p0, p1), Math.max(p0, p1), zm - 0.2, zm + 0.2, F2, F2 + 0.03, C.white);
         D_('浴廁_蹲式馬桶凹槽', Math.min(p0, p1) + 0.08, Math.max(p0, p1) - 0.08, zm - 0.12, zm + 0.12, F2 + 0.031, F2 + 0.033, 0x3a3f42);
         D_('浴廁_沖水管', back - dir * 0.04 - 0.02, back - dir * 0.04 + 0.02, zm - 0.02, zm + 0.02, F2, F2 + 1.1, C.pipe);
@@ -526,8 +534,8 @@ export function buildDorm() {
   column('shower', bx(275), bx(230), 'W'); backWall(275, 300); column('shower', bx(300), bx(372), 'E');
   column('shower', bx(503), bx(440), 'W'); backWall(503, 522);
   // 洗衣機（黃）與飲水機（紫）：靠在背牆東側
-  for (const py of [717, 818, 916]) { const z = bz(py); S_('浴廁_洗衣機', bx(522), bx(522) + 0.62, z - 0.31, z + 0.31, FP, FP + 0.88, 0xe2e2dc); D_('浴廁_洗衣機蓋', bx(522) + 0.1, bx(522) + 0.52, z - 0.21, z + 0.21, FP + 0.88, FP + 0.9, 0x9aa0a6); }
-  { const z = bz(993); S_('浴廁_飲水機', bx(522), bx(522) + 0.45, z - 0.25, z + 0.25, FP, FP + 1.3, C.disp); D_('浴廁_飲水機面板', bx(522) + 0.45, bx(522) + 0.47, z - 0.18, z + 0.18, FP + 0.95, FP + 1.2, C.black); }
+  for (const py of [717, 818, 916]) { const z = bz(py); props.push({ k: 'washer', x0: bx(522), x1: bx(522) + 0.62, z0: z - 0.31, z1: z + 0.31, y: FP, face: 'E' }); S_('浴廁_洗衣機', bx(522), bx(522) + 0.62, z - 0.31, z + 0.31, FP, FP + 0.88, 0xe2e2dc); D_('浴廁_洗衣機蓋', bx(522) + 0.1, bx(522) + 0.52, z - 0.21, z + 0.21, FP + 0.88, FP + 0.9, 0x9aa0a6); }
+  { const z = bz(993); props.push({ k: 'disp', x0: bx(522), x1: bx(522) + 0.45, z0: z - 0.25, z1: z + 0.25, y: FP, face: 'E' }); S_('浴廁_飲水機', bx(522), bx(522) + 0.45, z - 0.25, z + 0.25, FP, FP + 1.3, C.disp); D_('浴廁_飲水機面板', bx(522) + 0.45, bx(522) + 0.47, z - 0.18, z + 0.18, FP + 0.95, FP + 1.2, C.black); }
   // 北牆的小洗手台（紅）
   { const x0 = bx(605), x1 = bx(660); S_('浴廁_洗手台', x0, x1, BZ0, BZ0 + 0.55, FP, FP + 0.85, C.white); D_('浴廁_鏡子', x0, x1, BZ0, BZ0 + 0.02, FP + 1.1, FP + 2.0, C.mirror); D_('浴廁_洗手盆', x0 + 0.1, x1 - 0.1, BZ0 + 0.12, BZ0 + 0.45, FP + 0.85, FP + 0.9, 0x88a4ab) }
   // 中間：兩道牆夾著的落地窗
@@ -673,6 +681,12 @@ export function buildDorm() {
   for (const r of rooms) { const oX = r.X; r.X = (d) => oX(d) + XS; r.cx += XS; }
   for (const o of [tv, remote, hou]) if (o) o.x = mx(o.x, C2);
   for (const bg of bags) bg[1] += XS;
+  for (const p of props) { const c = p.y > 3 ? C2 : C1; if (p.x !== undefined) p.x = mx(p.x, c); if (p.x0 !== undefined) { if (p.x0 >= c) { p.x0 += XS; p.x1 += XS; } else if (p.x1 > c) p.x1 += XS; } }
+  // 晒衣場：草地、曬衣桿（木樁＋鐵鍊）用最終座標從方塊取出
+  for (const b of deco) if (b.n === '中庭_草地') props.push({ k: 'grass', x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, y: 0 });
+  { const posts = solid.filter((b) => b.n === '中庭_曬衣桿柱'), rows = new Map();
+    for (const b of posts) { const z = +((b.z0 + b.z1) / 2).toFixed(2); if (!rows.has(z)) rows.set(z, []); rows.get(z).push((b.x0 + b.x1) / 2); }
+    for (const [z, xs] of rows) { xs.sort((a, b) => a - b); props.push({ k: 'clothesline', z, xs, y: 0 }); } }
   // 填滿：原本陽台西邊那塊空洞（交誼廳北牆外、一樓屋頂上方）做成實心建築
   S_('二樓_宿管室上方建築', XO0 - WT, XO1 - 0.3, -4.32, ZN1 - WT, F - 0.2, H2 + 0.15, C.wall); // 只填宿管室上方（晒衣場西側高樓後面）；陽台旁邊那段不再填
   // 加長那段南側（落地窗西邊）補上白牆
@@ -698,7 +712,7 @@ export function buildDorm() {
     S_('欄杆碰撞', px - 0.35, px + 0.35, pz - 0.35, pz + 0.35, F, F + 0.8, 0x7a4a2c); // 擺飾的碰撞（看不見）
   }
   return {
-    solid, deco, spots, patrol, lights, signs, terrazzo, diag, rots, prisms, doors, beams, tplanes, sprisms, fogs, extra, tv, remote, hou, bags, rooms,
+    solid, deco, spots, patrol, lights, signs, props, NO_DRAW, terrazzo, diag, rots, prisms, doors, beams, tplanes, sprisms, fogs, extra, tv, remote, hou, bags, rooms,
     F, H2, DOOR: { ...DOOR, z: ZB }, spawn: { x: DOOR.x, y: 0, z: ZB - 0.9 }, npc: { x: DOOR.x, y: 0, z: ZB - 3.2 },
     bathZ: ZR0, wheyDesk: '二樓_208房_書桌1', XS, altVia: { x: -13.4 + XS, y: F, z: ZR0 + 1.6 },
     exitSign: { x: DOOR.x, y: 2.78, z: ZB - 0.02 }, outside: { x: DOOR.x, z: ZB + 5, w: 14, d: 10 },

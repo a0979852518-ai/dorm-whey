@@ -46,7 +46,7 @@
     const bg = new Map(), glass = [], frost = [];
     // 1) 同顏色、截面完全相同、首尾相接的方塊先合併成一塊（接縫直接消失，也少很多三角形）
     const boxes = [];
-    for (const b of DORM.solid.concat(DORM.deco)) { if (b.n.startsWith('空氣牆') || b.n === '斜牆碰撞' || b.n.startsWith('樓梯碰撞') || b.n === '欄杆碰撞') continue; boxes.push({ x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, c: b.c, win: b.n.includes('窗戶') }); }
+    for (const b of DORM.solid.concat(DORM.deco)) { if (b.n.startsWith('空氣牆') || b.n === '斜牆碰撞' || b.n.startsWith('樓梯碰撞') || b.n === '欄杆碰撞' || DORM.NO_DRAW.test(b.n)) continue; boxes.push({ x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, c: b.c, win: b.n.includes('窗戶') }); }
     const mergeAxis = (list, ax) => {
       const o = ax === 'x' ? ['y', 'z'] : ax === 'y' ? ['x', 'z'] : ['x', 'y'], r = (v) => Math.round(v * 2000);
       const groups = new Map();
@@ -83,7 +83,20 @@
       const m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, vertexColors: true, side: THREE.DoubleSide })); m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; scene.add(m);
     }
     { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(glass, 3)); geo.computeVertexNormals(); scene.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ shininess: 30, specular: 0x222222, color: 0x1d3140, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }))); }
-    { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(frost, 3)); geo.computeVertexNormals(); scene.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ shininess: 20, specular: 0x222222, color: 0xc9ccc4, emissive: 0x15160f, transparent: true, opacity: 0.86, side: THREE.DoubleSide, depthWrite: false }))); }
+    { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(frost, 3)); geo.computeVertexNormals();
+      { // 霧面壓花玻璃（照片：一朵一朵的花紋）：依世界座標貼 UV
+        const p = geo.attributes.position, nn = geo.attributes.normal, uv = new Float32Array(p.count * 2);
+        for (let i = 0; i < p.count; i++) { const u = Math.abs(nn.getX(i)) > Math.abs(nn.getZ(i)) ? p.getZ(i) : p.getX(i); uv[i * 2] = u / 0.36; uv[i * 2 + 1] = p.getY(i) / 0.36; }
+        geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); }
+      const fc = document.createElement('canvas'); fc.width = fc.height = 256; { const g = fc.getContext('2d'); g.fillStyle = '#c9ccc4'; g.fillRect(0, 0, 256, 256);
+        const flower = (cx, cy, r) => { for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4, px = cx + Math.cos(a) * r * 0.55, py = cy + Math.sin(a) * r * 0.55;
+            g.fillStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.ellipse(px - 1.5, py - 1.5, r * 0.32, r * 0.2, a, 0, Math.PI * 2); g.fill();
+            g.fillStyle = 'rgba(90,95,90,0.28)'; g.beginPath(); g.ellipse(px + 1.5, py + 1.5, r * 0.32, r * 0.2, a, 0, Math.PI * 2); g.fill(); }
+          g.fillStyle = 'rgba(255,255,255,0.4)'; g.beginPath(); g.arc(cx - 1, cy - 1, r * 0.18, 0, Math.PI * 2); g.fill(); g.strokeStyle = 'rgba(80,85,80,0.3)'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, r * 0.92, 0, Math.PI * 2); g.stroke(); };
+        for (const [x, y] of [[0, 0], [256, 0], [0, 256], [256, 256], [128, 128]]) flower(x, y, 62);
+        for (const [x, y] of [[128, 0], [0, 128], [256, 128], [128, 256]]) { g.fillStyle = 'rgba(255,255,255,0.3)'; g.beginPath(); g.arc(x, y, 18, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(90,95,90,0.25)'; g.beginPath(); g.arc(x + 3, y + 3, 16, 0, Math.PI * 2); g.fill(); } }
+      const ft = new THREE.CanvasTexture(fc); ft.encoding = THREE.sRGBEncoding; ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.anisotropy = 4;
+      scene.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ map: ft, shininess: 20, specular: 0x222222, color: 0xffffff, emissive: 0x15160f, transparent: true, opacity: 0.86, side: THREE.DoubleSide, depthWrite: false }))); }
     // 房門門牌：201–215 在走廊右手邊（由北往南）、216–230 在左手邊
     for (const b of raw) {
       if (!b.n.includes('門框上緣')) continue; const no = roomNo(b.n); if (!no) continue;
@@ -108,6 +121,7 @@
     const o = DORM.outside; const og = new THREE.Mesh(new THREE.PlaneGeometry(o.w, o.d), new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, color: 0x15171a }));
     og.rotation.x = -Math.PI / 2; og.position.set(o.x, -0.01, o.z); og.receiveShadow = true; scene.add(og);
   })();
+  buildProps(DORM, scene); // 細緻模型（props.js）
 
   // ---------- 燈光 ----------
   // 只有手電筒照到的地方有光（另有敵人身上的紅光）
@@ -153,10 +167,18 @@
   const loadTex = (src) => new Promise((res) => texLoader.load(src, (t) => { t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; res(t); }));
   // 走廊磨石子地板
   texLoader.load(A.terrazzo, (t0) => {
-    for (const mat of TERRAZZO_MATS) { const t = t0.clone(); t.needsUpdate = true; t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.repeat.set(1 / 1.15, 1 / 1.5); mat.map = t; mat.needsUpdate = true; }
+    { // 照片裡的磨石子地是一塊一塊約 1 m 見方的格子：每格顏色差一點點，格子之間有深色分隔線（貼圖 3.07 m 一循環，剛好 3×3 格）
+      const im = t0.image, S = im.width, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+      const n = 3, w = S / n, tint = [0.05, -0.04, 0.01, -0.06, 0.03, -0.02, 0.06, -0.01, -0.05];
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const v = tint[i * n + j]; g.fillStyle = v > 0 ? `rgba(255,250,240,${v})` : `rgba(20,18,15,${-v})`; g.fillRect(i * w, j * w, w, w); }
+      g.fillStyle = 'rgba(28,26,24,0.85)'; for (let i = 0; i < n; i++) { g.fillRect(i * w - 1.5, 0, 3, S); g.fillRect(0, i * w - 1.5, S, 3); }
+      g.fillRect(S - 1.5, 0, 1.5, S); g.fillRect(0, S - 1.5, S, 1.5);
+      t0.image = c;
+    }
+    for (const mat of TERRAZZO_MATS) { const t = t0.clone(); t.needsUpdate = true; t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.repeat.set(1 / 3.07, 1 / 3.07); mat.map = t; mat.needsUpdate = true; }
     const pos = [], uv = [], t = t0.clone(); t.needsUpdate = true; t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
     for (const r of DORM.terrazzo) { // 全部合成一個網格
-      const { x0, x1, z0, z1, y } = r; for (const [x, z] of [[x0, z1], [x1, z1], [x1, z0], [x0, z1], [x1, z0], [x0, z0]]) { pos.push(x, y, z); uv.push(x / 1.15, -z / 1.5); }
+      const { x0, x1, z0, z1, y } = r; for (const [x, z] of [[x0, z1], [x1, z1], [x1, z0], [x0, z1], [x1, z0], [x0, z0]]) { pos.push(x, y, z); uv.push(x / 3.07, -z / 3.07); }
     }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.computeVertexNormals();
     const m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ shininess: 26, specular: 0x262420, map: t, color: 0xa69a8a })); m.receiveShadow = true; scene.add(m);

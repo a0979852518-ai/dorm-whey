@@ -6,7 +6,7 @@ assets='window.__ASSETS={glb:"%s",p1:"data:image/webp;base64,%s",p2:"data:image/
 logic=re.sub(r'^export ','',r('src/logic.js')+'\n'+r('src/dorm.js'),flags=re.M)
 for mode in ('cdn','local'):
     three='<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>' if mode=='cdn' else '<script src="../vendor/three.min.js"></script>'
-    html=r('src/shell.html')+'\n'+three+'\n<script>'+assets+'</script>\n<script>\n'+logic+'\n'+r('src/main.js')+'\n</script>\n'
+    html=r('src/shell.html')+'\n'+three+'\n<script>'+assets+'</script>\n<script>\n'+logic+'\n'+r('src/props.js')+'\n'+r('src/main.js')+'\n</script>\n'
     if mode=='local': html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>'+html+'</body></html>'
     os.makedirs(os.path.join(D,'dist'),exist_ok=True)
     open(os.path.join(D,'dist','dorm-whey.html' if mode=='cdn' else 'local.html'),'w',encoding='utf-8').write(html)

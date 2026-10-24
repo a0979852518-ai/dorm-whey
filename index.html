@@ -886,7 +886,7 @@ class Enemy {
 // 一樓：大廳（沙發區、宿管室、上鎖的房間）＋西側走道＋西南角樓梯（斜向梯段→中間平台→沿西牆上二樓；往三樓的梯段用空氣牆擋住）
 // 二樓：樓梯上來是交誼廳（北側大陽台、南側落地窗與沙發區）→ 東端左轉走廊 → 北端浴室廁所
 // 有細緻模型（props）的物件：方塊只當碰撞、不畫出來
-const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|浴廁_小便斗(?!區)|浴廁_感應器)/;
+const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|浴廁_小便斗(?!區)|浴廁_感應器|中庭_冷氣室外機)/;
 function buildDorm() {
   const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [], props = []; // props：細緻模型（main 用 props.js 畫；方塊只留碰撞，見 NO_DRAW）
   const F = 3.35, H2 = F + 3.6, F3 = H2 + 0.2, TOP = F3 + 3.0; // 二樓地坪、二樓天花板、三樓地坪、樓梯間頂
@@ -1597,6 +1597,8 @@ function buildDorm() {
       rots.push({ n: '交誼廳_擺飾', x: px + Math.cos(a) * r, z: pz + Math.sin(a) * r, wa: r * 0.8, wb: 0.05, y0: y, y1: y + 0.05, ry: -a, c: WD[(j + k) % 3] }); } }
     S_('欄杆碰撞', px - 0.35, px + 0.35, pz - 0.35, pz + 0.35, F, F + 0.8, 0x7a4a2c); // 擺飾的碰撞（看不見）
   }
+  // 冷氣室外機（props.js 的 ac）：西側高樓的放地上、寢室外牆的掛在牆上（有鐵架）
+  for (const b of deco) if (b.n === '中庭_冷氣室外機') props.push({ k: 'ac', x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, face: (b.x0 + b.x1) / 2 < -16 ? 'E' : 'W', y: b.y0 });
   // 細長的管線方塊改畫成圓管（props.js 的 tube）
   for (const b of deco) if (/管線|水管|沖水管/.test(b.n)) {
     const d = [b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0], m = Math.max(...d), ai = d.indexOf(m), r = Math.min(...d.filter((_, i) => i !== ai)) / 2;
@@ -1707,6 +1709,12 @@ function buildProps(DORM, scene) {
     sheet: P({ color: 0xdedbd2, shininess: 30 }),
     porcelainIn: P({ color: 0xe4e2da, shininess: 70, specular: 0x555555 }),
     sensor: P({ color: 0xd9d2bd, shininess: 40 }),
+    acBody: P({ color: 0xe2e3de, shininess: 45, specular: 0x333333 }),
+    acDark: P({ color: 0x1d2022, shininess: 10 }),
+    acGrey: P({ color: 0xa9aca8, shininess: 30 }),
+    acGrille: P({ color: 0xcfd1cc, shininess: 50 }),
+    acBracket: P({ color: 0x6f716e, shininess: 40, specular: 0x333333 }),
+    acPipe: P({ color: 0xe9e7df, shininess: 20 }),
     conduit: P({ color: 0xd6d3c8, shininess: 45, specular: 0x333333 }),
   };
   const glassMat = new T.MeshPhongMaterial({ color: 0x9fb8b4, shininess: 90, specular: 0x888888, transparent: true, opacity: 0.32, depthWrite: false, side: T.DoubleSide });
@@ -1824,6 +1832,28 @@ function buildProps(DORM, scene) {
     put('black', box(0.08, 0.035, 0.005), F, 0.03, 0.96, 0.071);
     put('c:' + 0x222222, cyl(0.003, 0.003, 0.22, 4), F, -0.07, 0.78, 0.012);
   };
+  // ---------- 冷氣室外機：白色機殼、左邊圓形風扇護網、右邊散熱百葉；掛牆的有 L 型鐵架與保溫管 ----------
+  const acUnit = (p) => {
+    const W = p.z1 - p.z0, D = p.x1 - p.x0, H = p.y1 - p.y0, wall = p.y0 > 0.5;
+    const F = frame((p.x0 + p.x1) / 2, p.y0, (p.z0 + p.z1) / 2, p.face === 'E' ? Math.PI / 2 : -Math.PI / 2), fz = D / 2;
+    put('acBody', rbox(W, H, D, 0.025), F, 0, H / 2, 0);
+    const R = Math.min(H * 0.4, W * 0.3), fx = -W / 2 + R + 0.06;
+    put('acDark', new T.CircleGeometry(R, 20), F, fx, H / 2, fz + 0.002);
+    put('acGrey', cyl(R * 0.22, R * 0.22, 0.02, 12), F, fx, H / 2, fz - 0.005, Math.PI / 2);
+    for (let k = 0; k < 3; k++) { const b = k * 2 * Math.PI / 3 + 0.4; put('acGrey', box(R * 0.85, 0.004, 0.005), F, fx + Math.cos(b) * R * 0.45, H / 2 + Math.sin(b) * R * 0.45, fz - 0.002, 0, 0, b); }
+    for (const rr of [0.35, 0.6, 0.85, 1.0]) put('acGrille', new T.TorusGeometry(R * rr, 0.004, 3, 24), F, fx, H / 2, fz + 0.006);
+    for (const a of [0, Math.PI / 2]) put('acGrille', box(2 * R, 0.006, 0.006), F, fx, H / 2, fz + 0.007, 0, 0, a);
+    const vx0 = fx + R + 0.06, vx1 = W / 2 - 0.05;
+    for (let y = 0.08; y < H - 0.06; y += 0.03) put('acGrey', box(vx1 - vx0, 0.008, 0.008), F, (vx0 + vx1) / 2, y, fz + 0.002);
+    put('acGrey', box(W * 0.25, 0.03, 0.004), F, W / 2 - W * 0.17, H - 0.05, fz + 0.002); // 銘牌
+    if (wall) {
+      for (const sx of [-1, 1]) { const x = sx * W * 0.32; put('acBracket', box(0.035, 0.035, D + 0.08), F, x, -0.018, 0.04); put('acBracket', box(0.035, 0.32, 0.035), F, x, -0.16, -D / 2 - 0.0175 + 0.035);
+        put('acBracket', box(0.025, 0.025, 0.42), F, x, -0.17, -0.04, Math.PI / 4.2); }
+    } else for (const sx of [-1, 1]) put('acBracket', box(0.05, 0.06, D + 0.06), F, sx * W * 0.35, -0.03 + 0.03, 0);
+    const px = W / 2 + 0.035, pz = -D / 2 + 0.07; // 保溫管：從機器側面接出來、沿牆往上
+    put('acPipe', cyl(0.024, 0.024, 0.1, 8), F, W / 2 + 0.01, H * 0.3, pz, 0, 0, Math.PI / 2);
+    put('acPipe', cyl(0.024, 0.024, wall ? 0.9 : 1.6, 8), F, px + 0.03, H * 0.3 + (wall ? 0.45 : 0.8), pz);
+  };
   // ---------- 晒衣場：草地（貼圖＋一叢一叢的草）、木樁與下垂的鐵鍊 ----------
   const grassGeo = [], tufts = [];
   const grass = (p) => {
@@ -1849,6 +1879,7 @@ function buildProps(DORM, scene) {
     else if (p.k === 'disp') dispenser(p); else if (p.k === 'squat') squat(p); else if (p.k === 'washer') washer(p);
     else if (p.k === 'pipe') { const g = cyl(p.r, p.r, p.z1 - p.z0, 10); g.rotateX(Math.PI / 2); put('conduit', g, frame(p.x, p.y, (p.z0 + p.z1) / 2), 0, 0, 0); }
     else if (p.k === 'tube') { const len = p.ax === 'x' ? p.x1 - p.x0 : p.ax === 'y' ? p.y1 - p.y0 : p.z1 - p.z0, g = cyl(p.r, p.r, len, 8); if (p.ax === 'x') g.rotateZ(Math.PI / 2); if (p.ax === 'z') g.rotateX(Math.PI / 2); put('c:' + p.c, g, frame((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2, (p.z0 + p.z1) / 2), 0, 0, 0); }
+    else if (p.k === 'ac') acUnit(p);
     else if (p.k === 'cable') cable(p); else if (p.k === 'urinal') urinal(p);
     else if (p.k === 'grass') grass(p); else if (p.k === 'clothesline') clothesline(p);
   }
@@ -1963,14 +1994,16 @@ function buildProps(DORM, scene) {
     for (const sp of DORM.sprisms) { const g = sprismGeo(sp); bake(g, new THREE.Object3D(), sp.c); }
     for (const w of DORM.diag) { const o = new THREE.Object3D(); o.position.set((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2, (w.z0 + w.z1) / 2); o.rotation.y = Math.atan2(w.x1 - w.x0, w.z1 - w.z0); bake(new THREE.BoxGeometry(w.t, w.y1 - w.y0, Math.hypot(w.x1 - w.x0, w.z1 - w.z0)), o, w.c); }
     for (const pr of DORM.prisms) { const sh = new THREE.Shape(pr.pts.map((p) => new THREE.Vector2(p.x, p.z))); const g = new THREE.ExtrudeGeometry(sh, { depth: pr.y1 - pr.y0, bevelEnabled: false }); g.rotateX(Math.PI / 2); g.translate(0, pr.y1, 0);
-      if (pr.tex) { const mat = new THREE.MeshPhongMaterial({ shininess: 26, specular: 0x262420, color: pr.c, side: THREE.DoubleSide }); TERRAZZO_MATS.push(mat); const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; scene.add(m); }
-      else bake(g, new THREE.Object3D(), pr.c); }
+      bake(g, new THREE.Object3D(), pr.tex ? 0xcbc0aa : pr.c); // 平台本體（側面、底面）是一般的牆面
+      if (pr.tex) { // 只有上表面鋪磨石子（原本整塊都貼，從樓梯底下看側面和底面也是磨石子）
+        const tg = new THREE.ShapeGeometry(sh); tg.rotateX(Math.PI / 2); tg.translate(0, pr.y1 + 0.004, 0); const uv = tg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, -uv.getY(i));
+        const mat = new THREE.MeshPhongMaterial({ shininess: 26, specular: 0x262420, color: pr.c, side: THREE.DoubleSide }); TERRAZZO_MATS.push(mat); const m = new THREE.Mesh(tg, mat); m.receiveShadow = true; scene.add(m); } }
     { // 所有不透明的方塊合成「一個」網格，用頂點顏色區分材質顏色（只要 1 次 draw call）
       let n = 0; for (const arr of bg.values()) n += arr.length;
       const pos = new Float32Array(n), col = new Float32Array(n), wear = new Float32Array(n / 3 * 2); let o = 0; const cc = new THREE.Color();
       // 每個顏色的「陳舊程度」：x＝水泥質感強度、y＝髒污強度（白牆、天花板、水泥最髒；家具、門窗框幾乎不加）
       const CONC = new Set([0x55564f, 0x777b7d, 0x6c6d68, 0xb9b6ad, 0x2a2825, 0x1c1b19, 0x3a3936, 0x9a9287]), WALLS = new Set([0xcbc0aa, 0xdcdad3, 0xbab4ad, 0xc4bcae, 0x2c2a26, 0xe3e3dd, 0xd8d8d2, 0xcbc0aa, 0x8d908f]);
-      for (const [c, arr] of bg) { cc.setHex(c); pos.set(arr, o); const wx = CONC.has(c) ? 1 : WALLS.has(c) ? 0.35 : 0, wy = CONC.has(c) ? 1 : WALLS.has(c) ? 0.85 : 0.2;
+      for (const [c, arr] of bg) { cc.setHex(c); pos.set(arr, o); const wx = 0, wy = CONC.has(c) || WALLS.has(c) ? 0.85 : 0.2; // 水泥顆粒質感（x）先關掉，只留髒污
         for (let i = 0; i < arr.length; i += 3) { col[o + i] = cc.r; col[o + i + 1] = cc.g; col[o + i + 2] = cc.b; const v = (o + i) / 3 * 2; wear[v] = wx; wear[v + 1] = wy; } o += arr.length; }
       const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setAttribute('wear', new THREE.BufferAttribute(wear, 2)); geo.computeVertexNormals();
       const envMat = new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, vertexColors: true, side: THREE.DoubleSide });

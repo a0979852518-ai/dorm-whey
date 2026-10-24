@@ -75,6 +75,12 @@ function buildProps(DORM, scene) {
     sheet: P({ color: 0xdedbd2, shininess: 30 }),
     porcelainIn: P({ color: 0xe4e2da, shininess: 70, specular: 0x555555 }),
     sensor: P({ color: 0xd9d2bd, shininess: 40 }),
+    acBody: P({ color: 0xe2e3de, shininess: 45, specular: 0x333333 }),
+    acDark: P({ color: 0x1d2022, shininess: 10 }),
+    acGrey: P({ color: 0xa9aca8, shininess: 30 }),
+    acGrille: P({ color: 0xcfd1cc, shininess: 50 }),
+    acBracket: P({ color: 0x6f716e, shininess: 40, specular: 0x333333 }),
+    acPipe: P({ color: 0xe9e7df, shininess: 20 }),
     conduit: P({ color: 0xd6d3c8, shininess: 45, specular: 0x333333 }),
   };
   const glassMat = new T.MeshPhongMaterial({ color: 0x9fb8b4, shininess: 90, specular: 0x888888, transparent: true, opacity: 0.32, depthWrite: false, side: T.DoubleSide });
@@ -192,6 +198,28 @@ function buildProps(DORM, scene) {
     put('black', box(0.08, 0.035, 0.005), F, 0.03, 0.96, 0.071);
     put('c:' + 0x222222, cyl(0.003, 0.003, 0.22, 4), F, -0.07, 0.78, 0.012);
   };
+  // ---------- 冷氣室外機：白色機殼、左邊圓形風扇護網、右邊散熱百葉；掛牆的有 L 型鐵架與保溫管 ----------
+  const acUnit = (p) => {
+    const W = p.z1 - p.z0, D = p.x1 - p.x0, H = p.y1 - p.y0, wall = p.y0 > 0.5;
+    const F = frame((p.x0 + p.x1) / 2, p.y0, (p.z0 + p.z1) / 2, p.face === 'E' ? Math.PI / 2 : -Math.PI / 2), fz = D / 2;
+    put('acBody', rbox(W, H, D, 0.025), F, 0, H / 2, 0);
+    const R = Math.min(H * 0.4, W * 0.3), fx = -W / 2 + R + 0.06;
+    put('acDark', new T.CircleGeometry(R, 20), F, fx, H / 2, fz + 0.002);
+    put('acGrey', cyl(R * 0.22, R * 0.22, 0.02, 12), F, fx, H / 2, fz - 0.005, Math.PI / 2);
+    for (let k = 0; k < 3; k++) { const b = k * 2 * Math.PI / 3 + 0.4; put('acGrey', box(R * 0.85, 0.004, 0.005), F, fx + Math.cos(b) * R * 0.45, H / 2 + Math.sin(b) * R * 0.45, fz - 0.002, 0, 0, b); }
+    for (const rr of [0.35, 0.6, 0.85, 1.0]) put('acGrille', new T.TorusGeometry(R * rr, 0.004, 3, 24), F, fx, H / 2, fz + 0.006);
+    for (const a of [0, Math.PI / 2]) put('acGrille', box(2 * R, 0.006, 0.006), F, fx, H / 2, fz + 0.007, 0, 0, a);
+    const vx0 = fx + R + 0.06, vx1 = W / 2 - 0.05;
+    for (let y = 0.08; y < H - 0.06; y += 0.03) put('acGrey', box(vx1 - vx0, 0.008, 0.008), F, (vx0 + vx1) / 2, y, fz + 0.002);
+    put('acGrey', box(W * 0.25, 0.03, 0.004), F, W / 2 - W * 0.17, H - 0.05, fz + 0.002); // 銘牌
+    if (wall) {
+      for (const sx of [-1, 1]) { const x = sx * W * 0.32; put('acBracket', box(0.035, 0.035, D + 0.08), F, x, -0.018, 0.04); put('acBracket', box(0.035, 0.32, 0.035), F, x, -0.16, -D / 2 - 0.0175 + 0.035);
+        put('acBracket', box(0.025, 0.025, 0.42), F, x, -0.17, -0.04, Math.PI / 4.2); }
+    } else for (const sx of [-1, 1]) put('acBracket', box(0.05, 0.06, D + 0.06), F, sx * W * 0.35, -0.03 + 0.03, 0);
+    const px = W / 2 + 0.035, pz = -D / 2 + 0.07; // 保溫管：從機器側面接出來、沿牆往上
+    put('acPipe', cyl(0.024, 0.024, 0.1, 8), F, W / 2 + 0.01, H * 0.3, pz, 0, 0, Math.PI / 2);
+    put('acPipe', cyl(0.024, 0.024, wall ? 0.9 : 1.6, 8), F, px + 0.03, H * 0.3 + (wall ? 0.45 : 0.8), pz);
+  };
   // ---------- 晒衣場：草地（貼圖＋一叢一叢的草）、木樁與下垂的鐵鍊 ----------
   const grassGeo = [], tufts = [];
   const grass = (p) => {
@@ -217,6 +245,7 @@ function buildProps(DORM, scene) {
     else if (p.k === 'disp') dispenser(p); else if (p.k === 'squat') squat(p); else if (p.k === 'washer') washer(p);
     else if (p.k === 'pipe') { const g = cyl(p.r, p.r, p.z1 - p.z0, 10); g.rotateX(Math.PI / 2); put('conduit', g, frame(p.x, p.y, (p.z0 + p.z1) / 2), 0, 0, 0); }
     else if (p.k === 'tube') { const len = p.ax === 'x' ? p.x1 - p.x0 : p.ax === 'y' ? p.y1 - p.y0 : p.z1 - p.z0, g = cyl(p.r, p.r, len, 8); if (p.ax === 'x') g.rotateZ(Math.PI / 2); if (p.ax === 'z') g.rotateX(Math.PI / 2); put('c:' + p.c, g, frame((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2, (p.z0 + p.z1) / 2), 0, 0, 0); }
+    else if (p.k === 'ac') acUnit(p);
     else if (p.k === 'cable') cable(p); else if (p.k === 'urinal') urinal(p);
     else if (p.k === 'grass') grass(p); else if (p.k === 'clothesline') clothesline(p);
   }

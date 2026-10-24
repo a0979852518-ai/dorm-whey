@@ -73,14 +73,16 @@
     for (const sp of DORM.sprisms) { const g = sprismGeo(sp); bake(g, new THREE.Object3D(), sp.c); }
     for (const w of DORM.diag) { const o = new THREE.Object3D(); o.position.set((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2, (w.z0 + w.z1) / 2); o.rotation.y = Math.atan2(w.x1 - w.x0, w.z1 - w.z0); bake(new THREE.BoxGeometry(w.t, w.y1 - w.y0, Math.hypot(w.x1 - w.x0, w.z1 - w.z0)), o, w.c); }
     for (const pr of DORM.prisms) { const sh = new THREE.Shape(pr.pts.map((p) => new THREE.Vector2(p.x, p.z))); const g = new THREE.ExtrudeGeometry(sh, { depth: pr.y1 - pr.y0, bevelEnabled: false }); g.rotateX(Math.PI / 2); g.translate(0, pr.y1, 0);
-      if (pr.tex) { const mat = new THREE.MeshPhongMaterial({ shininess: 26, specular: 0x262420, color: pr.c, side: THREE.DoubleSide }); TERRAZZO_MATS.push(mat); const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; scene.add(m); }
-      else bake(g, new THREE.Object3D(), pr.c); }
+      bake(g, new THREE.Object3D(), pr.tex ? 0xcbc0aa : pr.c); // 平台本體（側面、底面）是一般的牆面
+      if (pr.tex) { // 只有上表面鋪磨石子（原本整塊都貼，從樓梯底下看側面和底面也是磨石子）
+        const tg = new THREE.ShapeGeometry(sh); tg.rotateX(Math.PI / 2); tg.translate(0, pr.y1 + 0.004, 0); const uv = tg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, -uv.getY(i));
+        const mat = new THREE.MeshPhongMaterial({ shininess: 26, specular: 0x262420, color: pr.c, side: THREE.DoubleSide }); TERRAZZO_MATS.push(mat); const m = new THREE.Mesh(tg, mat); m.receiveShadow = true; scene.add(m); } }
     { // 所有不透明的方塊合成「一個」網格，用頂點顏色區分材質顏色（只要 1 次 draw call）
       let n = 0; for (const arr of bg.values()) n += arr.length;
       const pos = new Float32Array(n), col = new Float32Array(n), wear = new Float32Array(n / 3 * 2); let o = 0; const cc = new THREE.Color();
       // 每個顏色的「陳舊程度」：x＝水泥質感強度、y＝髒污強度（白牆、天花板、水泥最髒；家具、門窗框幾乎不加）
       const CONC = new Set([0x55564f, 0x777b7d, 0x6c6d68, 0xb9b6ad, 0x2a2825, 0x1c1b19, 0x3a3936, 0x9a9287]), WALLS = new Set([0xcbc0aa, 0xdcdad3, 0xbab4ad, 0xc4bcae, 0x2c2a26, 0xe3e3dd, 0xd8d8d2, 0xcbc0aa, 0x8d908f]);
-      for (const [c, arr] of bg) { cc.setHex(c); pos.set(arr, o); const wx = CONC.has(c) ? 1 : WALLS.has(c) ? 0.35 : 0, wy = CONC.has(c) ? 1 : WALLS.has(c) ? 0.85 : 0.2;
+      for (const [c, arr] of bg) { cc.setHex(c); pos.set(arr, o); const wx = 0, wy = CONC.has(c) || WALLS.has(c) ? 0.85 : 0.2; // 水泥顆粒質感（x）先關掉，只留髒污
         for (let i = 0; i < arr.length; i += 3) { col[o + i] = cc.r; col[o + i + 1] = cc.g; col[o + i + 2] = cc.b; const v = (o + i) / 3 * 2; wear[v] = wx; wear[v + 1] = wy; } o += arr.length; }
       const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setAttribute('wear', new THREE.BufferAttribute(wear, 2)); geo.computeVertexNormals();
       const envMat = new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, vertexColors: true, side: THREE.DoubleSide });

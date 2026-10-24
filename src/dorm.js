@@ -3,7 +3,7 @@
 // 一樓：大廳（沙發區、宿管室、上鎖的房間）＋西側走道＋西南角樓梯（斜向梯段→中間平台→沿西牆上二樓；往三樓的梯段用空氣牆擋住）
 // 二樓：樓梯上來是交誼廳（北側大陽台、南側落地窗與沙發區）→ 東端左轉走廊 → 北端浴室廁所
 // 有細緻模型（props）的物件：方塊只當碰撞、不畫出來
-const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|浴廁_小便斗(?!區)|浴廁_感應器)/;
+const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|浴廁_小便斗(?!區)|浴廁_感應器|中庭_冷氣室外機)/;
 export function buildDorm() {
   const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [], props = []; // props：細緻模型（main 用 props.js 畫；方塊只留碰撞，見 NO_DRAW）
   const F = 3.35, H2 = F + 3.6, F3 = H2 + 0.2, TOP = F3 + 3.0; // 二樓地坪、二樓天花板、三樓地坪、樓梯間頂
@@ -714,6 +714,8 @@ export function buildDorm() {
       rots.push({ n: '交誼廳_擺飾', x: px + Math.cos(a) * r, z: pz + Math.sin(a) * r, wa: r * 0.8, wb: 0.05, y0: y, y1: y + 0.05, ry: -a, c: WD[(j + k) % 3] }); } }
     S_('欄杆碰撞', px - 0.35, px + 0.35, pz - 0.35, pz + 0.35, F, F + 0.8, 0x7a4a2c); // 擺飾的碰撞（看不見）
   }
+  // 冷氣室外機（props.js 的 ac）：西側高樓的放地上、寢室外牆的掛在牆上（有鐵架）
+  for (const b of deco) if (b.n === '中庭_冷氣室外機') props.push({ k: 'ac', x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, face: (b.x0 + b.x1) / 2 < -16 ? 'E' : 'W', y: b.y0 });
   // 細長的管線方塊改畫成圓管（props.js 的 tube）
   for (const b of deco) if (/管線|水管|沖水管/.test(b.n)) {
     const d = [b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0], m = Math.max(...d), ai = d.indexOf(m), r = Math.min(...d.filter((_, i) => i !== ai)) / 2;

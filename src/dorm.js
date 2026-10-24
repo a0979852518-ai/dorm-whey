@@ -3,7 +3,7 @@
 // 一樓：大廳（沙發區、宿管室、上鎖的房間）＋西側走道＋西南角樓梯（斜向梯段→中間平台→沿西牆上二樓；往三樓的梯段用空氣牆擋住）
 // 二樓：樓梯上來是交誼廳（北側大陽台、南側落地窗與沙發區）→ 東端左轉走廊 → 北端浴室廁所
 // 有細緻模型（props）的物件：方塊只當碰撞、不畫出來
-const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|走廊_管線)/;
+const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|浴廁_小便斗(?!區)|浴廁_感應器)/;
 export function buildDorm() {
   const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [], props = []; // props：細緻模型（main 用 props.js 畫；方塊只留碰撞，見 NO_DRAW）
   const F = 3.35, H2 = F + 3.6, F3 = H2 + 0.2, TOP = F3 + 3.0; // 二樓地坪、二樓天花板、三樓地坪、樓梯間頂
@@ -63,6 +63,9 @@ export function buildDorm() {
   D_('一樓_平面圖', -33.2, -32.7, MZ, MZ + 0.03, 1.15, 1.8, 0x9bbf6a);
   signs.push({ x: -32.05, y: 1.8, z: MZ + 0.04, t: '重要聯絡電話', c: '#b01818', ry: 0, w: 0.8, h: 1.3, board: ['一、校安值勤專線', '二、宿舍值勤室', '三、正門警衛室', '四、派出所', '五、無線電計程車'] });
   for (const dz of [0.1, 0.2, 0.3]) D_('一樓_天花板管線', XW - 7, XO0 - WT, MZ + dz - 0.025, MZ + dz + 0.025, F - 0.5, F - 0.45, 0xd8d8d2);
+  for (const [dz, y] of [[0.42, F - 0.3], [0.5, F - 0.3], [0.6, F - 0.36]]) D_('一樓_天花板管線', XA, XO0 - WT, MZ + dz - 0.02, MZ + dz + 0.02, y - 0.04, y, 0xe2e0d8); // 照片：天花板一整排白色線管
+  for (let x = XA + 0.4; x < XO0 - 0.3; x += 1.4) D_('一樓_管線吊架', x, x + 0.03, MZ + 0.05, MZ + 0.66, F - 0.48, F - 0.45, 0x8a8c8a);
+  props.push({ k: 'cable', x0: XA, x1: XO0 - WT, z: MZ + 0.24, y: F - 0.46, sag: 0.12, step: 1.4, r: 0.016, c: 0x141414 }, { k: 'cable', x0: XA, x1: XO0 - WT, z: MZ + 0.3, y: F - 0.47, sag: 0.16, step: 1.4, r: 0.012, c: 0x1c1c1c }, { k: 'cable', x0: XA + 0.2, x1: XO0 - WT, z: MZ + 0.36, y: F - 0.46, sag: 0.1, step: 2.8, r: 0.02, c: 0xc9a43a }); // 黑色電線、黃色軟管
   // 開口外：戶外迴廊（用空氣牆擋住）——整片暗暗的、霧霧的，只隱約看得到柱子
   const AX = XW - 9;
   S_('一樓迴廊_地面', AX, XW, MZ - 0.3, AG1, -0.22, 0, 0x2a2825);
@@ -320,7 +323,6 @@ export function buildDorm() {
     D_('走廊_線槽', sx * (XC - 0.08), sx * (XC - 0.5), ZR0, ZEND, H2 - 0.48, H2 - 0.44, C.tray);
     for (let z = ZR0 + 0.5; z < ZEND; z += 1.6) D_('走廊_線槽吊桿', sx * (XC - 0.3) - 0.01, sx * (XC - 0.3) + 0.01, z, z + 0.02, H2 - 0.44, H2, C.tray);
     for (const dx of [0.12, 0.22, 0.32, 0.42]) D_('走廊_管線', sx * (XC - dx) - 0.025, sx * (XC - dx) + 0.025, ZR0, ZEND, H2 - 0.43, H2 - 0.38, C.pipe);
-    for (const dx of [0.12, 0.22, 0.32, 0.42]) props.push({ k: 'pipe', x: sx * (XC - dx), y: H2 - 0.405, z0: ZR0, z1: ZEND, r: 0.024 });
   }
   for (let z = ZR0 + 3.3; z < ZEND; z += 6.6) D_('走廊_橫樑', -XC, XC, z - 0.2, z + 0.2, H2 - 0.35, H2, C.wall);
   for (let z = ZR0 + 5; z < ZEND; z += 6.6) D_('日光燈', -0.14, 0.14, z - 0.62, z + 0.62, H2 - 0.42, H2 - 0.33, C.lamp);
@@ -563,11 +565,12 @@ export function buildDorm() {
   column('stall', bx(1305), bx(1245), 'W'); backWall(1305, 1325); column('stall', bx(1325), bx(1382), 'E');
   column('stall', bx(1525), bx(1468), 'W');
   // 北牆的兩個小便斗（綠）
-  for (const [a, b] of [[1178, 1222], [1402, 1448]]) { const xm = (bx(a) + bx(b)) / 2; S_('浴廁_小便斗', xm - 0.22, xm + 0.22, BZ0, BZ0 + 0.34, FP + 0.45, FP + 1.1, C.white); D_('浴廁_感應器', xm - 0.15, xm + 0.15, BZ0, BZ0 + 0.08, FP + 1.35, FP + 1.5, C.white); }
+  for (const [a, b] of [[1178, 1222], [1402, 1448]]) { const xm = (bx(a) + bx(b)) / 2; props.push({ k: 'urinal', x: xm, z: BZ0, y: FP + 0.45, face: 'S' }); S_('浴廁_小便斗', xm - 0.22, xm + 0.22, BZ0, BZ0 + 0.34, FP + 0.45, FP + 1.1, C.white); D_('浴廁_感應器', xm - 0.15, xm + 0.15, BZ0, BZ0 + 0.08, FP + 1.35, FP + 1.5, C.white); }
+  for (const [a, b] of [[1153, 1245], [1382, 1468]]) D_('浴廁_橘色磁磚帶', bx(a), bx(b), BZ0 + 0.006, BZ0 + 0.016, FP + 1.24, FP + 1.32, 0xc47a36); // 照片：小便斗那面牆的橘色小磁磚帶
   // 東南角小便斗區（不做台階）
   S_('浴廁_小便斗區北牆', bx(1452), BX1, bz(1070) - 0.06, bz(1070) + 0.06, F, F + 2.2, C.tileW);
   S_('浴廁_小便斗區隔牆', bx(1452) - 0.06, bx(1452) + 0.06, bz(1150), ZAN, F, F + 2.2, C.tileW);
-  for (const py of [1110, 1196]) { const z = bz(py); S_('浴廁_小便斗', BX1 - 0.34, BX1, z - 0.22, z + 0.22, F + 0.45, F + 1.1, C.white); D_('浴廁_感應器', BX1 - 0.08, BX1, z - 0.15, z + 0.15, F + 1.35, F + 1.5, C.white); }
+  for (const py of [1110, 1196]) { const z = bz(py); props.push({ k: 'urinal', x: BX1, z, y: F + 0.45, face: 'W' }); S_('浴廁_小便斗', BX1 - 0.34, BX1, z - 0.22, z + 0.22, F + 0.45, F + 1.1, C.white); D_('浴廁_感應器', BX1 - 0.08, BX1, z - 0.15, z + 0.15, F + 1.35, F + 1.5, C.white); }
   S_('浴廁_拖把桶', XAN + 0.3, XAN + 0.8, ZAN - 0.7, ZAN - 0.2, F, F + 0.5, 0x5b5f3a);
   // 入口
   // 巡邏點
@@ -710,6 +713,11 @@ export function buildDorm() {
     for (let k = 0; k < 14; k++) { const r = 0.16 + k * 0.016, y = F + 0.03 + k * 0.055; for (let j = 0; j < 8; j++) { const a = j * Math.PI / 4 + (k % 2) * Math.PI / 8;
       rots.push({ n: '交誼廳_擺飾', x: px + Math.cos(a) * r, z: pz + Math.sin(a) * r, wa: r * 0.8, wb: 0.05, y0: y, y1: y + 0.05, ry: -a, c: WD[(j + k) % 3] }); } }
     S_('欄杆碰撞', px - 0.35, px + 0.35, pz - 0.35, pz + 0.35, F, F + 0.8, 0x7a4a2c); // 擺飾的碰撞（看不見）
+  }
+  // 細長的管線方塊改畫成圓管（props.js 的 tube）
+  for (const b of deco) if (/管線|水管|沖水管/.test(b.n)) {
+    const d = [b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0], m = Math.max(...d), ai = d.indexOf(m), r = Math.min(...d.filter((_, i) => i !== ai)) / 2;
+    if (m < r * 6) continue; props.push({ k: 'tube', ax: 'xyz'[ai], x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, r, c: b.c }); b.noDraw = true;
   }
   return {
     solid, deco, spots, patrol, lights, signs, props, NO_DRAW, terrazzo, diag, rots, prisms, doors, beams, tplanes, sprisms, fogs, extra, tv, remote, hou, bags, rooms,

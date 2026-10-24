@@ -46,7 +46,7 @@
     const bg = new Map(), glass = [], frost = [];
     // 1) 同顏色、截面完全相同、首尾相接的方塊先合併成一塊（接縫直接消失，也少很多三角形）
     const boxes = [];
-    for (const b of DORM.solid.concat(DORM.deco)) { if (b.n.startsWith('空氣牆') || b.n === '斜牆碰撞' || b.n.startsWith('樓梯碰撞') || b.n === '欄杆碰撞' || DORM.NO_DRAW.test(b.n)) continue; boxes.push({ x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, c: b.c, win: b.n.includes('窗戶') }); }
+    for (const b of DORM.solid.concat(DORM.deco)) { if (b.n.startsWith('空氣牆') || b.n === '斜牆碰撞' || b.n.startsWith('樓梯碰撞') || b.n === '欄杆碰撞' || b.noDraw || DORM.NO_DRAW.test(b.n)) continue; boxes.push({ x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, c: b.c, win: b.n.includes('窗戶') }); }
     const mergeAxis = (list, ax) => {
       const o = ax === 'x' ? ['y', 'z'] : ax === 'y' ? ['x', 'z'] : ['x', 'y'], r = (v) => Math.round(v * 2000);
       const groups = new Map();
@@ -77,10 +77,41 @@
       else bake(g, new THREE.Object3D(), pr.c); }
     { // 所有不透明的方塊合成「一個」網格，用頂點顏色區分材質顏色（只要 1 次 draw call）
       let n = 0; for (const arr of bg.values()) n += arr.length;
-      const pos = new Float32Array(n), col = new Float32Array(n); let o = 0; const cc = new THREE.Color();
-      for (const [c, arr] of bg) { cc.setHex(c); pos.set(arr, o); for (let i = 0; i < arr.length; i += 3) { col[o + i] = cc.r; col[o + i + 1] = cc.g; col[o + i + 2] = cc.b; } o += arr.length; }
-      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
-      const m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, vertexColors: true, side: THREE.DoubleSide })); m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; scene.add(m);
+      const pos = new Float32Array(n), col = new Float32Array(n), wear = new Float32Array(n / 3 * 2); let o = 0; const cc = new THREE.Color();
+      // 每個顏色的「陳舊程度」：x＝水泥質感強度、y＝髒污強度（白牆、天花板、水泥最髒；家具、門窗框幾乎不加）
+      const CONC = new Set([0x55564f, 0x777b7d, 0x6c6d68, 0xb9b6ad, 0x2a2825, 0x1c1b19, 0x3a3936, 0x9a9287]), WALLS = new Set([0xcbc0aa, 0xdcdad3, 0xbab4ad, 0xc4bcae, 0x2c2a26, 0xe3e3dd, 0xd8d8d2, 0xcbc0aa, 0x8d908f]);
+      for (const [c, arr] of bg) { cc.setHex(c); pos.set(arr, o); const wx = CONC.has(c) ? 1 : WALLS.has(c) ? 0.35 : 0, wy = CONC.has(c) ? 1 : WALLS.has(c) ? 0.85 : 0.2;
+        for (let i = 0; i < arr.length; i += 3) { col[o + i] = cc.r; col[o + i + 1] = cc.g; col[o + i + 2] = cc.b; const v = (o + i) / 3 * 2; wear[v] = wx; wear[v + 1] = wy; } o += arr.length; }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setAttribute('wear', new THREE.BufferAttribute(wear, 2)); geo.computeVertexNormals();
+      const envMat = new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a, vertexColors: true, side: THREE.DoubleSide });
+      { // 舊舊髒髒的感覺：水泥面的顆粒與裂痕、牆角往上的污垢、雨痕一樣的垂直髒線、一塊一塊的污漬（全部用世界座標算，不需要 UV）
+        const mk = (S, draw) => { const c = document.createElement('canvas'); c.width = c.height = S; draw(c.getContext('2d'), S); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+        let sd = 99; const rn = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+        const concT = mk(512, (g, S) => { g.fillStyle = '#808080'; g.fillRect(0, 0, S, S);
+          for (let i = 0; i < 9000; i++) { const v = 90 + rn() * 80; g.fillStyle = `rgba(${v},${v},${v},0.35)`; const r = 1 + rn() * 3; g.fillRect(rn() * S, rn() * S, r, r); }
+          for (let i = 0; i < 70; i++) { const v = rn() < 0.5 ? 60 : 170, x = rn() * S, y = rn() * S, r = 20 + rn() * 70; const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${v},${v},${v},0.25)`); gr.addColorStop(1, `rgba(${v},${v},${v},0)`); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
+          g.strokeStyle = 'rgba(30,30,30,0.6)'; for (let i = 0; i < 9; i++) { let x = rn() * S, y = rn() * S; g.lineWidth = 0.8 + rn(); g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 9; k++) { x += (rn() - 0.5) * 40; y += rn() * 30; g.lineTo(x, y); } g.stroke(); } });
+        const dirtT = mk(256, (g, S) => { g.fillStyle = '#000'; g.fillRect(0, 0, S, S);
+          for (let i = 0; i < 90; i++) { const x = rn() * S, y = rn() * S, r = 8 + rn() * 50, a = 0.12 + rn() * 0.3; for (const [dx, dy] of [[0, 0], [S, 0], [-S, 0], [0, S], [0, -S]]) { const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r); gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x + dx - r, y + dy - r, 2 * r, 2 * r); } }
+          for (let i = 0; i < 160; i++) { const x = rn() * S, w = 1 + rn() * 3, h = 20 + rn() * 140, y = rn() * S; g.fillStyle = `rgba(255,255,255,${0.08 + rn() * 0.18})`; g.fillRect(x, y, w, h); g.fillRect(x, y - S, w, h); } });
+        envMat.onBeforeCompile = (sh) => {
+          sh.uniforms.concT = { value: concT }; sh.uniforms.dirtT = { value: dirtT };
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 wear; varying vec2 vWear; varying vec3 vWP; varying vec3 vWN;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWear = wear; vWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
+          sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D concT; uniform sampler2D dirtT; varying vec2 vWear; varying vec3 vWP; varying vec3 vWN;')
+            .replace('#include <color_fragment>', `#include <color_fragment>
+              vec3 an = abs(vWN); vec2 uvp = an.y > max(an.x, an.z) ? vWP.xz : (an.x > an.z ? vWP.zy : vWP.xy);
+              float cn = texture2D(concT, uvp / 2.6).r;
+              diffuseColor.rgb *= mix(1.0, 0.55 + 0.9 * cn, vWear.x);
+              float blot = texture2D(dirtT, uvp / 5.3 + 0.37).r;
+              float streak = an.y < 0.5 ? smoothstep(0.25, 0.6, texture2D(dirtT, vec2(uvp.x / 4.1, vWP.y / 9.0)).r) : 0.0;
+              float yb = vWP.y < 3.3 ? vWP.y : vWP.y - 3.35; if (yb < 0.0) yb = vWP.y - 3.6;
+              float foot = an.y < 0.5 ? (1.0 - smoothstep(0.0, 0.55, yb)) * (0.55 + 0.45 * texture2D(dirtT, vec2(uvp.x / 2.3, 0.5)).r) : 0.0;
+              diffuseColor.rgb *= 1.0 - vWear.y * clamp(0.32 * blot + 0.2 * streak + 0.3 * foot, 0.0, 0.6);
+              diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.0, 0.96, 0.86), vWear.y * 0.5 * blot);`);
+        };
+      }
+      const m = new THREE.Mesh(geo, envMat); m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; scene.add(m);
     }
     { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(glass, 3)); geo.computeVertexNormals(); scene.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ shininess: 30, specular: 0x222222, color: 0x1d3140, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }))); }
     { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(frost, 3)); geo.computeVertexNormals();

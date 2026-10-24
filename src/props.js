@@ -73,6 +73,8 @@ function buildProps(DORM, scene) {
     gray: P({ color: 0x9aa0a6, shininess: 50, specular: 0x444444 }),
     post: P({ color: 0xffffff, map: woodTex, shininess: 6 }),
     sheet: P({ color: 0xdedbd2, shininess: 30 }),
+    porcelainIn: P({ color: 0xe4e2da, shininess: 70, specular: 0x555555 }),
+    sensor: P({ color: 0xd9d2bd, shininess: 40 }),
     conduit: P({ color: 0xd6d3c8, shininess: 45, specular: 0x333333 }),
   };
   const glassMat = new T.MeshPhongMaterial({ color: 0x9fb8b4, shininess: 90, specular: 0x888888, transparent: true, opacity: 0.32, depthWrite: false, side: T.DoubleSide });
@@ -169,6 +171,27 @@ function buildProps(DORM, scene) {
     put('black', box(w - 0.22, 0.004, d - 0.36), F, 0, H + 0.019, 0.07);
   };
 
+  // ---------- 天花板垂下來的電線（每個吊點之間微微下垂）----------
+  const cable = (p) => {
+    const pts = []; for (let x = p.x0; x < p.x1 - 0.01; x += p.step) { const b = Math.min(p.x1, x + p.step); for (let k = 0; k < 6; k++) { const t = k / 6; pts.push(new T.Vector3(x + (b - x) * t, p.y - p.sag * 4 * t * (1 - t) * (0.7 + 0.3 * Math.sin(x * 3.1)), p.z + Math.sin(x * 1.7 + t * 2) * 0.03)); } }
+    pts.push(new T.Vector3(p.x1, p.y, p.z));
+    put('c:' + p.c, new T.TubeGeometry(new T.CatmullRomCurve3(pts), pts.length * 3, p.r, 5, false), new T.Matrix4(), 0, 0, 0);
+  };
+  // ---------- 小便斗（照片：壁掛式、上方有感應器）----------
+  const urinal = (p) => {
+    const F = frame(p.x, p.y, p.z, p.face === 'W' ? -Math.PI / 2 : p.face === 'E' ? Math.PI / 2 : p.face === 'N' ? Math.PI : 0), U = 'porcelain', I = 'porcelainIn';
+    put(U, rbox(0.36, 0.64, 0.05, 0.02), F, 0, 0.32, 0.025);
+    for (const s of [-1, 1]) put(U, rbox(0.06, 0.6, 0.3, 0.025, 3), F, s * 0.15, 0.33, 0.15);
+    put(U, rbox(0.36, 0.13, 0.32, 0.05, 3), F, 0, 0.065, 0.16);
+    put(U, rbox(0.36, 0.09, 0.24, 0.03, 3), F, 0, 0.6, 0.12);
+    put(I, box(0.24, 0.46, 0.01), F, 0, 0.36, 0.055);
+    put(I, box(0.24, 0.01, 0.22), F, 0, 0.13, 0.16);
+    put('drain', new T.CircleGeometry(0.03, 10), F, 0, 0.136, 0.15, -Math.PI / 2);
+    put('chrome', cyl(0.018, 0.018, 0.3, 8), F, 0, -0.14, 0.06);
+    put('sensor', rbox(0.22, 0.11, 0.07, 0.015), F, 0, 0.95, 0.035);
+    put('black', box(0.08, 0.035, 0.005), F, 0.03, 0.96, 0.071);
+    put('c:' + 0x222222, cyl(0.003, 0.003, 0.22, 4), F, -0.07, 0.78, 0.012);
+  };
   // ---------- 晒衣場：草地（貼圖＋一叢一叢的草）、木樁與下垂的鐵鍊 ----------
   const grassGeo = [], tufts = [];
   const grass = (p) => {
@@ -193,6 +216,8 @@ function buildProps(DORM, scene) {
     else if (p.k === 'lobbyTable') lobbyTable(p); else if (p.k === 'rattanTable') rattanTable(p);
     else if (p.k === 'disp') dispenser(p); else if (p.k === 'squat') squat(p); else if (p.k === 'washer') washer(p);
     else if (p.k === 'pipe') { const g = cyl(p.r, p.r, p.z1 - p.z0, 10); g.rotateX(Math.PI / 2); put('conduit', g, frame(p.x, p.y, (p.z0 + p.z1) / 2), 0, 0, 0); }
+    else if (p.k === 'tube') { const len = p.ax === 'x' ? p.x1 - p.x0 : p.ax === 'y' ? p.y1 - p.y0 : p.z1 - p.z0, g = cyl(p.r, p.r, len, 8); if (p.ax === 'x') g.rotateZ(Math.PI / 2); if (p.ax === 'z') g.rotateX(Math.PI / 2); put('c:' + p.c, g, frame((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2, (p.z0 + p.z1) / 2), 0, 0, 0); }
+    else if (p.k === 'cable') cable(p); else if (p.k === 'urinal') urinal(p);
     else if (p.k === 'grass') grass(p); else if (p.k === 'clothesline') clothesline(p);
   }
 
@@ -211,7 +236,7 @@ function buildProps(DORM, scene) {
   for (const [key, b] of bins) {
     if (!b.geos.length) continue; const g = merge(b.geos);
     if (key === 'rattan') triplanar(g, 0.32); if (key === 'post') triplanar(g, 0.5);
-    const m = new T.Mesh(g, MAT[key]()); m.castShadow = key !== 'chrome'; m.receiveShadow = true; m.frustumCulled = false; scene.add(m);
+    const m = new T.Mesh(g, key.startsWith('c:') ? new T.MeshPhongMaterial({ color: +key.slice(2), shininess: 35, specular: 0x2a2a2a }) : MAT[key]()); m.castShadow = key !== 'chrome'; m.receiveShadow = true; m.frustumCulled = false; scene.add(m);
   }
   if (glassGeos.length) { const m = new T.Mesh(merge(glassGeos), glassMat); m.renderOrder = 2; scene.add(m); }
   if (grassGeo.length) { const m = new T.Mesh(merge(grassGeo), new T.MeshPhongMaterial({ map: grassTex, color: 0xb8d0a0, shininess: 3 })); m.receiveShadow = true; scene.add(m); }

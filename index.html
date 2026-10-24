@@ -1263,40 +1263,53 @@ function buildDorm() {
     D_(tag + '鞋櫃門縫', X(1.04), X(1.06), z0 + 0.43, z0 + 0.44, F + 0.05, F + 0.95, 0xb0b0aa);
     D_(tag + '鏡框', X(0), X(0.03), zc + DW / 2 + 0.15, zc + DW / 2 + 0.75, F + 0.35, F + 1.95, 0x9a9c9a); D_(tag + '鏡子', X(0.03), X(0.04), zc + DW / 2 + 0.19, zc + DW / 2 + 0.71, F + 0.39, F + 1.91, C.mirror);
     S_(tag + '鞋櫃', X(0.25), X(1.85), z1 - 0.43, z1 - 0.08, F, F + 1.0, BW_);
-    // 上舖下桌（參考照片）：白色床箱、灰色方管床架、床下衣櫃＋書桌＋書架、斜靠的灰色鐵梯
-    let k = 0;
-    for (const side of [0, 1]) for (const [d0, d1] of [[3.3, 5.35], [5.55, 7.6]]) {
-      k++;
+    // 上舖下桌（參考照片）：同一面牆兩張床頭尾相接；床下櫃子連著櫃子（門口端書桌＋書架 → 衣櫃 → 衣櫃 → 窗邊書桌）；
+    // 兩張床中間共用一片隔板、一個斜靠的灰色鐵梯（上端彎鉤）；白色床箱、灰色方管床架
+    const DJ = 5.45, beds = [[3.3, DJ, 'door'], [DJ, 7.6, 'win']];
+    for (const side of [0, 1]) {
       const za = side === 0 ? z0 + 0.06 : z1 - 1.06, zb = za + 1.0, zw0 = side === 0 ? z0 + 0.06 : z1 - 0.66, zw1 = zw0 + 0.6;
-      const zin = side === 0 ? zb : za, out = side === 0 ? 1 : -1; // 靠走道那側、往走道的方向
-      S_(tag + '上舖床板' + k, X(d0), X(d1), za, zb, F + 1.84, F + 1.98, BW_);
-      S_(tag + '床墊' + k, X(d0 + 0.05), X(d1 - 0.05), za + 0.04, zb - 0.04, F + 1.98, F + 2.1, 0x7d8286);
-      D_(tag + '棉被' + k, X(d1 - 0.75), X(d1 - 0.15), za + 0.15, zb - 0.15, F + 2.1, F + 2.32, 0x5d6266);
-      S_(tag + '床側板' + k, X(d0 + 0.5), X(d1), zin - 0.02, zin + 0.02, F + 1.84, F + 2.38, BW_);
-      D_(tag + '床側板邊' + k, X(d0 + 0.5), X(d1), zin - 0.025, zin + 0.025, F + 2.36, F + 2.4, TEAL);
-      for (const dd of [d0, d1]) S_(tag + '床尾板' + k, X(dd - 0.02), X(dd + 0.02), za, zb, F + 1.84, F + 2.5, BW_);
-      for (const dd of [d0, d1 - 0.05]) for (const zz of [za, zb - 0.05]) S_(tag + '床架立柱' + k, X(dd), X(dd + 0.05), zz, zz + 0.05, F, F + 1.9, GRY);
-      // 床下：衣櫃（靠梯子那端）＋書桌＋書架
-      S_(tag + '衣櫃' + k, X(d0 + 0.06), X(d0 + 0.92), zw0, zw1, F, F + 1.8, BW_);
-      D_(tag + '衣櫃門縫' + k, X(d0 + 0.48), X(d0 + 0.5), side === 0 ? zw1 : zw0 - 0.005, side === 0 ? zw1 + 0.005 : zw0, F + 0.05, F + 1.75, 0xb0b0aa);
-      for (const dd of [d0 + 0.42, d0 + 0.56]) D_(tag + '衣櫃把手' + k, X(dd), X(dd + 0.02), side === 0 ? zw1 : zw0 - 0.03, side === 0 ? zw1 + 0.03 : zw0, F + 0.9, F + 1.05, 0x9a9a96);
-      S_(tag + '書桌' + k, X(d0 + 0.97), X(d1 - 0.06), zw0, zw1, F + 0.72, F + 0.76, DESK);
-      D_(tag + '書桌邊' + k, X(d0 + 0.97), X(d1 - 0.06), side === 0 ? zw1 : zw0 - 0.02, side === 0 ? zw1 + 0.02 : zw0, F + 0.71, F + 0.77, 0x7a4a2a);
-      S_(tag + '書桌抽屜' + k, X(d1 - 0.48), X(d1 - 0.06), zw0, zw1 - 0.04, F, F + 0.72, BW_);
-      D_(tag + '書架背板' + k, X(d0 + 0.97), X(d1 - 0.06), side === 0 ? zw0 : zw1 - 0.02, side === 0 ? zw0 + 0.02 : zw1, F + 0.76, F + 1.8, BW_);
-      const zs0 = side === 0 ? zw0 : zw1 - 0.32, zs1 = zs0 + 0.32;
-      D_(tag + '書架' + k, X(d0 + 0.97), X(d1 - 0.06), zs0, zs1, F + 1.1, F + 1.13, BW_); D_(tag + '書架' + k, X(d0 + 0.97), X(d1 - 0.06), zs0, zs1, F + 1.45, F + 1.48, BW_);
-      D_(tag + '書架' + k, X(d0 + 0.97), X(d1 - 0.06), side === 0 ? zs1 - 0.01 : zs0, side === 0 ? zs1 + 0.01 : zs0 + 0.01, F + 1.1, F + 1.12, TEAL);
-      // 摺疊椅
-      { const cx_ = (d0 + 0.97 + d1) / 2, cz_ = zin + out * -0.05 + (side === 0 ? -0.1 : 0.1);
-        const czz = side === 0 ? zw1 + 0.35 : zw0 - 0.35;
-        D_(tag + '椅子' + k, X(cx_ - 0.21), X(cx_ + 0.21), czz - 0.2, czz + 0.2, F + 0.44, F + 0.49, 0x1d1f22);
-        D_(tag + '椅背' + k, X(cx_ - 0.2), X(cx_ + 0.2), side === 0 ? czz + 0.18 : czz - 0.22, side === 0 ? czz + 0.22 : czz - 0.18, F + 0.55, F + 0.85, 0x1d1f22);
-        for (const [a, b] of [[-0.19, -0.18], [0.17, -0.18], [-0.19, 0.16], [0.17, 0.16]]) D_(tag + '椅腳' + k, X(cx_ + a), X(cx_ + a + 0.02), czz + b, czz + b + 0.02, F, F + 0.44, GRY); void cz_; }
-      // 斜靠的鐵梯（上端彎鉤）
-      const lzB = zin + out * 0.42, lzT = zin + out * 0.04;
-      for (const dd of [d0 + 0.08, d0 + 0.48]) { beams.push({ x0: X(dd), y0: F, z0: lzB, x1: X(dd), y1: F + 2.45, z1: lzT, w: 0.045, c: GRY }); beams.push({ x0: X(dd), y0: F + 2.45, z0: lzT, x1: X(dd), y1: F + 2.6, z1: lzT - out * 0.12, w: 0.045, c: GRY }); }
-      for (let j = 1; j <= 6; j++) { const t = j / 6.6, zz = lzB + (lzT - lzB) * t; D_(tag + '梯子橫桿' + k, X(d0 + 0.08), X(d0 + 0.52), zz - 0.02, zz + 0.02, F + 2.45 * t, F + 2.45 * t + 0.035, GRY); }
+      const zin = side === 0 ? zb : za, out = side === 0 ? 1 : -1, zf = side === 0 ? zw1 : zw0; // 靠走道那側、往走道的方向、櫃子正面
+      const face = (t) => (side === 0 ? [zf, zf + t] : [zf - t, zf]);
+      beds.forEach(([d0, d1, deskEnd], bi) => {
+        const k = side * 2 + bi + 1;
+        S_(tag + '上舖床板' + k, X(d0), X(d1), za, zb, F + 1.84, F + 1.98, BW_);
+        S_(tag + '床墊' + k, X(d0 + 0.05), X(d1 - 0.05), za + 0.04, zb - 0.04, F + 1.98, F + 2.1, 0x7d8286);
+        D_(tag + '棉被' + k, bi === 0 ? X(d0 + 0.15) : X(d1 - 0.75), bi === 0 ? X(d0 + 0.75) : X(d1 - 0.15), za + 0.15, zb - 0.15, F + 2.1, F + 2.32, 0x5d6266);
+        const sa = bi === 0 ? d0 : d0 + 0.3, sb = bi === 0 ? d1 - 0.3 : d1; // 梯子那段不做側板（上下床的開口）
+        S_(tag + '床側板' + k, X(sa), X(sb), zin - 0.02, zin + 0.02, F + 1.84, F + 2.38, BW_);
+        D_(tag + '床側板邊' + k, X(sa), X(sb), zin - 0.025, zin + 0.025, F + 2.36, F + 2.4, TEAL);
+        const endD = bi === 0 ? d0 : d1; S_(tag + '床尾板' + k, X(endD - 0.02), X(endD + 0.02), za, zb, F + 1.84, F + 2.5, BW_);
+        // 床下：書桌（門口那張在門口端、窗邊那張在窗邊）＋衣櫃（兩個衣櫃在中間連在一起）
+        const [ka, kb] = deskEnd === 'door' ? [d0 + 0.06, d0 + 1.2] : [d1 - 1.2, d1 - 0.06], [wa, wb] = deskEnd === 'door' ? [d0 + 1.22, d1 - 0.01] : [d0 + 0.01, d1 - 1.22];
+        S_(tag + '衣櫃' + k, X(wa), X(wb), zw0, zw1, F, F + 1.82, BW_);
+        const wm = (wa + wb) / 2;
+        D_(tag + '衣櫃門縫' + k, X(wm - 0.01), X(wm + 0.01), ...face(0.005), F + 0.05, F + 1.77, 0xb0b0aa);
+        for (const dd of [wm - 0.09, wm + 0.07]) D_(tag + '衣櫃把手' + k, X(dd), X(dd + 0.02), ...face(0.03), F + 0.95, F + 1.12, 0x9a9a96);
+        for (const dd of [wa, wb - 0.02]) D_(tag + '衣櫃邊' + k, X(dd), X(dd + 0.02), ...face(0.006), F, F + 1.82, TEAL);
+        S_(tag + '書桌' + k, X(ka), X(kb), zw0, zw1, F + 0.72, F + 0.76, DESK);
+        D_(tag + '書桌邊' + k, X(ka), X(kb), ...face(0.02), F + 0.71, F + 0.77, 0x7a4a2a);
+        const [ra, rb] = deskEnd === 'door' ? [ka, ka + 0.42] : [kb - 0.42, kb];
+        S_(tag + '書桌抽屜' + k, X(ra), X(rb), zw0, zw1 - 0.04, F, F + 0.72, BW_);
+        D_(tag + '書桌抽屜邊' + k, X(ra), X(rb), ...face(-0.035), F + 0.5, F + 0.52, TEAL);
+        D_(tag + '書架背板' + k, X(ka), X(kb), side === 0 ? zw0 : zw1 - 0.02, side === 0 ? zw0 + 0.02 : zw1, F + 0.76, F + 1.82, BW_);
+        const zs0 = side === 0 ? zw0 : zw1 - 0.32, zs1 = zs0 + 0.32;
+        for (const y of [F + 1.12, F + 1.47]) { D_(tag + '書架' + k, X(ka), X(kb), zs0, zs1, y, y + 0.03, BW_); D_(tag + '書架' + k, X(ka), X(kb), side === 0 ? zs1 - 0.01 : zs0, side === 0 ? zs1 + 0.01 : zs0 + 0.01, y, y + 0.02, TEAL); }
+        D_(tag + '床架橫桿' + k, X(ka), X(kb), zin - 0.03 * out - 0.02, zin - 0.03 * out + 0.02, F + 1.42, F + 1.46, GRY); // 書桌外側那根灰色橫桿
+        // 摺疊椅
+        { const cx_ = (ka + kb) / 2, czz = side === 0 ? zw1 + 0.35 : zw0 - 0.35;
+          D_(tag + '椅子' + k, X(cx_ - 0.21), X(cx_ + 0.21), czz - 0.2, czz + 0.2, F + 0.44, F + 0.49, 0x1d1f22);
+          D_(tag + '椅背' + k, X(cx_ - 0.2), X(cx_ + 0.2), side === 0 ? czz + 0.18 : czz - 0.22, side === 0 ? czz + 0.22 : czz - 0.18, F + 0.55, F + 0.85, 0x1d1f22);
+          for (const [a, b] of [[-0.19, -0.18], [0.17, -0.18], [-0.19, 0.16], [0.17, 0.16]]) D_(tag + '椅腳' + k, X(cx_ + a), X(cx_ + a + 0.02), czz + b, czz + b + 0.02, F, F + 0.44, GRY); }
+      });
+      // 床架立柱：兩端＋中間共用一組
+      for (const dd of [3.3, DJ - 0.025, 7.55]) for (const zz of [za, zb - 0.05]) S_(tag + '床架立柱' + (side * 2 + 1), X(dd), X(dd + 0.05), zz, zz + 0.05, F, F + 1.9, GRY);
+      // 兩張床中間共用的隔板（上緣做成圓弧感：中間高、兩側低）
+      S_(tag + '床間隔板' + (side + 1), X(DJ - 0.02), X(DJ + 0.02), za, zb, F + 1.84, F + 2.55, BW_);
+      D_(tag + '床間隔板邊' + (side + 1), X(DJ - 0.025), X(DJ + 0.025), za, zb, F + 2.55, F + 2.58, TEAL);
+      // 共用的斜靠鐵梯（在兩張床中間，上端彎鉤）
+      const lzB = zin + out * 0.5, lzT = zin + out * 0.04, la = DJ - 0.24, lb = DJ + 0.24;
+      for (const dd of [la, lb]) { beams.push({ x0: X(dd), y0: F, z0: lzB, x1: X(dd), y1: F + 2.45, z1: lzT, w: 0.045, c: GRY }); beams.push({ x0: X(dd), y0: F + 2.45, z0: lzT, x1: X(dd), y1: F + 2.6, z1: lzT - out * 0.12, w: 0.045, c: GRY }); }
+      for (let j = 1; j <= 7; j++) { const t = j / 7.6, zz = lzB + (lzT - lzB) * t; D_(tag + '梯子橫桿' + (side + 1), X(la), X(lb + 0.045), zz - 0.02, zz + 0.02, F + 2.45 * t, F + 2.45 * t + 0.035, GRY); }
     }
     rooms.push({ no, s, z0, z1, zc, cx: X(4.6), X });
     patrol.push({ x: X(1.0), z: zc, y: F });

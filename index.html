@@ -893,7 +893,7 @@ class Enemy {
 const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|浴廁_小便斗(?!區)|浴廁_感應器|中庭_冷氣室外機)/;
 function buildDorm() {
   const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [], props = []; // props：細緻模型（main 用 props.js 畫；方塊只留碰撞，見 NO_DRAW）
-  const F = 3.35, H2 = F + 3.6, F3 = H2 + 0.2, TOP = F3 + 3.0; // 二樓地坪、二樓天花板、三樓地坪、樓梯間頂
+  const F = 3.35, H2 = F + 4.0, F3 = H2 + 0.2, TOP = F3 + 3.0; // 二樓地坪、二樓天花板、三樓地坪、樓梯間頂
   const C = {
     wall: 0xcbc0aa, wallR: 0xbab4ad, wallL: 0xc4bcae, floorR: 0x9a9287, corr: 0x6a6258, slab: 0x777b7d, ceil: 0x2c2a26, skirt: 0x161412,
     step: 0x8a8580, land: 0x7a7672, rail: 0x5e6368, bedB: 0x918070, mat: 0xacada5, post: 0x646d74, desk: 0x947154, shoe: 0x9f8d7c,
@@ -1394,9 +1394,16 @@ function buildDorm() {
     const dir = open === 'E' ? -1 : 1; // 從開口往內
     const xa = Math.min(back, front), xb = Math.max(back, front), toilet = kind === 'stall';
     const L = (CZ1 - CZ0) / 4;
-    for (let k = 0; k <= 4; k++) S_('浴廁_隔間板', xa, xb, CZ0 + k * L - 0.03, CZ0 + k * L + 0.03, F + PH, F + PH + 2.1, C.stall);
+    const SH = toilet ? 0.2 : 0; // 廁所隔間比走道再高一階（照片）
+    for (let k = 0; k <= 4; k++) S_('浴廁_隔間板', xa, xb, CZ0 + k * L - 0.03, CZ0 + k * L + 0.03, F + PH, F + PH + SH + 2.1, C.stall);
     for (let k = 0; k < 4; k++) {
-      const z0 = CZ0 + k * L, z1 = z0 + L, zm = (z0 + z1) / 2, F2 = F + PH;
+      const z0 = CZ0 + k * L, z1 = z0 + L, zm = (z0 + z1) / 2, F2 = F + PH + SH;
+      if (toilet) { // 隔間內的台階：從後牆到門口，門口往走道多凸出 5 cm，立面與上面都貼地磚
+        const ef = front - dir * 0.05, sx0 = Math.min(back, ef), sx1 = Math.max(back, ef);
+        S_('浴廁_隔間台階', sx0, sx1, z0 + 0.03, z1 - 0.03, FP, F2, C.tile);
+        tplanes.push({ kind: 'bathFloor', x0: sx0, x1: sx1, z0: z0 + 0.03, z1: z1 - 0.03, y: F2 + 0.006 }, { kind: 'bathFloor', wall: 'x', x: ef - dir * 0.006, z0: z0 + 0.03, z1: z1 - 0.03, y0: FP, y1: F2, nx: -dir });
+        D_('浴廁_台階邊', Math.min(ef, ef + dir * 0.04), Math.max(ef, ef + dir * 0.04), z0 + 0.03, z1 - 0.03, F2, F2 + 0.004, C.stallF);
+      }
       if (toilet) { // 蹲式馬桶
         const p0 = back - dir * 0.22, p1 = back - dir * 0.82;
         props.push({ k: 'squat', x: (p0 + p1) / 2, z: zm, y: F2, dir });

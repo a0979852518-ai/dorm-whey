@@ -690,8 +690,9 @@
     const see = inCorr && world.los(P.x, P.y + 1.6, P.z, ZHU.x, F + 1.4, ZHU.z);
     let frame = 0;
     if (ZHU.st === 'idle') {
-      if (see && d < 15) ZHU.slow = true;
-      if (see && d < 8.5) { ZHU.st = 'run'; ZHU.side = P.x >= DORM.XS ? -1 : 1; }
+      // 21 m 遠遠開始看得到 → 被迫用走的；13 m 還看不太清楚時他就衝過來
+      if (see && d < 21) ZHU.slow = true;
+      if (see && d < 13) { ZHU.st = 'run'; ZHU.side = P.x >= DORM.XS ? -1 : 1; }
     } else {
       ZHU.t += dt; frame = 1 + (Math.floor(ZHU.t / 0.15) % 2);
       if (!ZHU.passed && ZHU.z >= P.z - 0.2) { ZHU.passed = true; ZHU.wp = [[clamp(ZHU.x, DORM.XS - 1.8, DORM.XS + 1.8), 9.6], [DORM.XS - 14, 10.2]]; }
@@ -699,7 +700,7 @@
       const vx = tx - ZHU.x, vz = tz - ZHU.z, L = Math.hypot(vx, vz) || 1, sp = 6.2 * dt; ZHU.x += vx / L * Math.min(sp, L + 0.6); ZHU.z += vz / L * Math.min(sp, L + 0.6);
       if ((ZHU.stepT += dt) > 0.29) { ZHU.stepT = 0; try { SFX.zhuStep(ZHU.x, F, ZHU.z); } catch (e) { } }
       if (!ZHU.said && d < 3.4) { ZHU.said = true; ZHU.slow = false; zhuSay([['乾，超黑的啦', 1900], ['發瘋', 1500]]); }
-      if (ZHU.passed && d > 17) { ZHU.st = 'gone'; return; }
+      if (ZHU.passed && d > 19) { ZHU.st = 'gone'; return; }
     }
     M.forEach((m, k) => { m.visible = k === frame; if (k === frame) m.position.set(ZHU.x, F + (frame ? Math.abs(Math.sin(ZHU.t * 21)) * 0.05 : 0), ZHU.z); });
   }

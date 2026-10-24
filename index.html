@@ -2604,7 +2604,8 @@ function buildProps(DORM, scene) {
         const C = AU.ctx, hp = C.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 140; const gate = C.createGain(); gate.gain.value = 0;
         const rev = C.createGain(); rev.gain.value = 0; const dl = C.createDelay(1.0); dl.delayTime.value = 0.15; const dlp = C.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2600;
         const fb = C.createGain(); fb.gain.value = 0; const wet = C.createGain(); wet.gain.value = 0;
-        src.connect(hp); hp.connect(gate); gate.connect(rev); rev.connect(AU.rev); gate.connect(dl); dl.connect(dlp); dlp.connect(fb); fb.connect(dl); dlp.connect(wet); wet.connect(AU.master);
+        const comp = C.createDynamicsCompressor(); comp.threshold.value = -26; comp.knee.value = 8; comp.ratio.value = 10; comp.attack.value = 0.004; comp.release.value = 0.2; // 自動增益後再壓一下，近距離大聲也不會爆
+        src.connect(hp); hp.connect(gate); gate.connect(comp); comp.connect(rev); rev.connect(AU.rev); comp.connect(dl); dl.connect(dlp); dlp.connect(fb); fb.connect(dl); dlp.connect(wet); wet.connect(AU.master);
         MIC.echo = { gate, rev, dl, fb, wet, zone: '' };
       }
       $('micHud').hidden = false; toast('麥克風校正中，請先保持安靜 2 秒……', 2600);
@@ -2629,8 +2630,9 @@ function buildProps(DORM, scene) {
   function micEcho() {
     const E = MIC.echo; if (!E) return; const C = AU.ctx, t = C.currentTime;
     const on = (G.phase === 'intro' || G.phase === 'quest' || G.phase === 'chase') && !G.paused && MIC.calibT <= 0;
-    const open = on ? clamp((MIC.rms - MIC.floor * 1.15) / (MIC.floor * 1.8 + 0.002), 0, 1) : 0; // 回音的門檻比捲毛聽到的門檻（micThr）低很多：正常音量說話就有回音
-    E.gate.gain.setTargetAtTime(open * 2.4, t, open > E.gate.gain.value ? 0.015 : 0.08);
+    const open = on ? clamp((MIC.rms - MIC.floor * 1.4) / (MIC.floor * 0.9 + 0.001), 0, 1) : 0; // 回音的門檻比捲毛聽到的門檻（micThr）低：離麥克風遠一點、正常音量說話就有回音
+    const makeup = clamp(0.09 / Math.max(MIC.rms, 1e-4), 1.5, 40); // 自動增益：聲音小（離麥克風遠）就放大，回音大小跟距離無關
+    E.gate.gain.setTargetAtTime(open * makeup, t, open > E.gate.gain.value ? 0.015 : 0.08);
     const [name, rv, dt, fbk, wet] = echoZone();
     if (name !== E.zone) { E.zone = name; E.rev.gain.setTargetAtTime(rv, t, 0.4); E.dl.delayTime.setTargetAtTime(dt, t, 0.3); E.fb.gain.setTargetAtTime(fbk, t, 0.3); E.wet.gain.setTargetAtTime(wet, t, 0.3); }
   }

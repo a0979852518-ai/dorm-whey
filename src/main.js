@@ -398,6 +398,20 @@
       if (tile) noiseHit(d, t, 'highpass', 3500, 0.7, g * 0.22, 0.001, 0.025);                           // 磁磚地的清脆聲
       if (!run && Math.random() < 0.06) tone(d, t + 0.05, 'sine', rand(2600, 3200), rand(3300, 3800), 0.012, 0.01, 0.05); // 偶爾的球鞋摩擦聲
     },
+    doorCreak(x, y, z) { // 老舊門板鬆脫前的吱──聲
+      if (!AU.ctx) return; const C = AU.ctx, t = C.currentTime, d = out(AU.sfx, x, y, z, 0.6);
+      const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(420, t); o.frequency.linearRampToValueAtTime(260, t + 0.35); o.frequency.linearRampToValueAtTime(330, t + 0.5);
+      const bp = C.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 6; const g = C.createGain(); env(g, t, 0.04, 0.16, 0.5);
+      const lfo = C.createOscillator(); lfo.frequency.value = 23; const lg = C.createGain(); lg.gain.value = 40; lfo.connect(lg); lg.connect(o.frequency);
+      o.connect(bp); bp.connect(g); g.connect(d); o.start(t); lfo.start(t); o.stop(t + 0.6); lfo.stop(t + 0.6);
+      noiseHit(d, t + 0.42, 'bandpass', 2200, 2, 0.25, 0.002, 0.05); // 鉸鏈螺絲崩掉的「喀」
+    },
+    doorCrash(x, y, z) { // 門板拍在磁磚地上：碰！＋回音很重的浴室殘響＋木板彈兩下
+      if (!AU.ctx) return; const C = AU.ctx, t = C.currentTime, d = out(AU.sfx, x, y, z, 1.1);
+      tone(d, t, 'sine', 95, 38, 1.1, 0.003, 0.32); noiseHit(d, t, 'lowpass', 1400, 0.8, 1.0, 0.001, 0.22); noiseHit(d, t, 'bandpass', 3200, 1.2, 0.35, 0.001, 0.09);
+      playStep('step_heavy', d, 1.5, 0.62, 2500);
+      for (const [dt, gv] of [[0.16, 0.35], [0.27, 0.16], [0.34, 0.07]]) { noiseHit(d, t + dt, 'lowpass', 1100, 0.8, gv, 0.001, 0.08); tone(d, t + dt, 'sine', 120, 60, gv * 0.6, 0.002, 0.1); }
+    },
     zhuStep(x, y, z) { // 竹竿穿拖鞋跑步：啪噠啪噠
       if (!AU.ctx) return; const t = AU.ctx.currentTime, d = out(AU.sfx, x, y + 0.1, z, 0.35);
       noiseHit(d, t, 'bandpass', rand(1500, 2300), 1.1, 0.5, 0.001, 0.035); noiseHit(d, t + 0.05, 'highpass', 2600, 0.8, 0.22, 0.001, 0.03); tone(d, t, 'sine', rand(95, 120), 60, 0.25, 0.003, 0.06);
@@ -706,6 +720,40 @@
   // 222 號房：潘柏翰（一開門就貼臉出現）
   loadTex(A.cig).then((t) => { TEX.cig = t; });
   loadTex(A.pan).then((t) => { panMesh = billboard(t, 1.76, 0x0c0c0c); panMesh.visible = false; });
+  // ---------- 浴室外間老舊的門：玩家看著它、距離剛好時倒下來（沒看到不會倒）----------
+  const FD = { d: DORM.fallDoor, st: 'up', t: 0, piv: null, box: null };
+  if (FD.d) { const d = FD.d, W = d.z1 - d.z0;
+    FD.piv = new THREE.Group(); FD.piv.position.set(d.x, d.y0, (d.z0 + d.z1) / 2); scene.add(FD.piv);
+    const mat = new THREE.MeshPhongMaterial({ color: d.c, shininess: 12, specular: 0x1a1a1a });
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.04, d.h, W), mat); leaf.position.set(0, d.h / 2, 0); leaf.castShadow = leaf.receiveShadow = true; FD.piv.add(leaf);
+    const hm = new THREE.MeshPhongMaterial({ color: 0x8a8c88, shininess: 60 });
+    const h = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.1), hm); h.position.set(0, d.h - 0.25, -W / 2); FD.piv.add(h); // 只剩上面一個鉸鏈
+    FD.base = { rx: 0.06, rz: -0.03 * d.fall }; FD.piv.rotation.set(FD.base.rx, 0, FD.base.rz); // 歪歪的掛著
+    FD.box = { n: 'fallDoor', x0: d.x - 0.06, x1: d.x + 0.06, z0: d.z0, z1: d.z1, y0: d.y0, y1: d.y0 + d.h, on: true, sight: false }; world.dyn.push(FD.box);
+    FD.thF = Math.PI / 2 + Math.asin(Math.min(0.5, (d.y0 - d.floor) / d.h));
+  }
+  function fallDoorReset() { if (!FD.d) return; FD.st = 'up'; FD.t = 0; FD.piv.rotation.set(FD.base.rx, 0, FD.base.rz); FD.box.on = true; }
+  function updateFallDoor(dt) {
+    if (!FD.d || FD.st === 'down' || G.paused) return; const d = FD.d, cz = (d.z0 + d.z1) / 2, rz = (a) => -a * d.fall;
+    if (FD.st === 'up') {
+      if (!playable() || P.hidden || P.y > d.floor + 0.15 || P.z < d.edge) return; // 只在走道（較低那層）上觸發
+      const dx = d.x - P.x, dz = cz - P.z, dist = Math.hypot(dx, dz);
+      if (dist < 2.6 || dist > 6.5) return; // 倒下來的範圍約 1.9 m，不會砸到玩家
+      const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw); if ((fx * dx + fz * dz) / dist < 0.82) return; // 要正在看著它
+      if (!world.los(P.x, P.y + eyeH(), P.z, d.x - d.fall * 0.15, d.y0 + 1.0, cz)) return;
+      FD.st = 'creak'; FD.t = 0; try { SFX.doorCreak(d.x, d.y0 + 1.5, cz); } catch (e) { }
+      return;
+    }
+    FD.t += dt; const t = FD.t, b0 = FD.base;
+    if (FD.st === 'creak') { FD.piv.rotation.set(b0.rx + Math.sin(t * 40) * 0.025, 0, b0.rz + rz(t * 0.1)); if (t > 0.5) { FD.st = 'fall'; FD.t = 0; FD.box.on = false; } return; }
+    if (FD.st === 'fall') {
+      const T = 0.62, k = Math.min(1, t / T), a0 = 0.05; FD.piv.rotation.set(b0.rx * (1 - k), 0, rz(a0 + (FD.thF - a0) * k * k));
+      if (k >= 1) { FD.st = 'bounce'; FD.t = 0; try { SFX.doorCrash(d.x + d.fall * 0.9, d.floor + 0.2, cz); } catch (e) { } G.shake = Math.max(G.shake || 0, 0.5);
+        if (enemy.active && G.phase === 'chase' && Math.abs(enemy.y - d.floor) < 1.5 && Math.hypot(enemy.x - d.x, enemy.z - cz) < 18) enemy.hear(d.x, d.floor, cz); }
+      return;
+    }
+    if (FD.st === 'bounce') { const bb = Math.abs(Math.sin(t * 22)) * Math.exp(-t * 9) * 0.07; FD.piv.rotation.set(0, 0, rz(FD.thF - bb)); if (t > 0.6) { FD.piv.rotation.set(0, 0, rz(FD.thF)); FD.st = 'down'; } }
+  }
   // ---------- 竹竿：222 和 210 門前、走廊正中間站著不動；看得到他時玩家被迫用走的，靠近一點他就朝玩家跑過來、擦身而過跑掉（不會傷人）----------
   const ZHU = { meshes: null, st: 'idle', slow: false };
   Promise.all([A.zhu_stand, A.zhu_run1, A.zhu_run2].map((u) => loadTex(u))).then((ts) => { ZHU.meshes = ts.map((t) => { const m = billboard(t, 1.74, 0x0c0c0c); m.visible = false; return m; }); zhuReset(); });
@@ -1002,7 +1050,7 @@
     Object.assign(G, { phase: 'intro', paused: false, enemyDist: 99, chaseMix: 0, enemySpeedMul: 1, items: [], cur: -1, hold: 0, holding: false, questT: 0, hintShown: false, sips: 0, hits: 0, startTime: performance.now(), bed: null, target: null, shake: 0 });
     enemy.reset(); enemyMesh.visible = false; npcMesh.visible = true; npcMesh.position.set(npcPos.x, 0, npcPos.z); npcBox.on = true; doorBox.on = true;
     eSpot.intensity = 0; eGlow.intensity = 0; eSpot.color.setHex(0xff1410); stunMesh.visible = false;
-    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; if (panMesh) panMesh.visible = false; zhuReset(); $('sub').classList.remove('show');
+    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
     spawnItems(); renderSlots(); tvReset();
     for (const d of DOORS) { d.open = false; d.ang = 0; d.piv.rotation.y = d.base; d.box.on = true; }
     MAIN.open = false; MAIN.ang = 0; for (const l of MAIN.leaves) l.piv.rotation.y = 0;
@@ -1211,7 +1259,7 @@
   let last = performance.now();
   const eyeH = () => K.EYE - 0.62 * (P.cr || 0); // 蹲下時眼睛高度降低約 60 cm
   function update(dt) {
-    updateDoors(dt); updatePan(dt); updateZhu(dt);
+    updateDoors(dt); updatePan(dt); updateZhu(dt); updateFallDoor(dt);
     if ((G.boostT || 0) > 0 && !G.paused && !dlgState) { G.boostT -= dt; if (G.boostT <= 0) toast('菸的效果退了', 1800); }
     const active = playable() && !G.paused && !dlgState;
     // 移動
@@ -1402,5 +1450,5 @@
 
   // 測試用
   enemy.altVia = DORM.altVia; // 晒衣場室外樓梯頂端的平台（二樓浴廁旁）
-  window.__game = { ZHU, camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
+  window.__game = { FD, ZHU, camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
 })();

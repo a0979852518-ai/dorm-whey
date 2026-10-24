@@ -5,7 +5,7 @@
 // 有細緻模型（props）的物件：方塊只當碰撞、不畫出來
 const NO_DRAW = /^(大廳_(沙發|茶几|桌巾|盆栽)|交誼廳_(長|雙人|三人)沙發|交誼廳_茶几|交誼廳_飲水機|浴廁_飲水機|浴廁_蹲式馬桶|浴廁_洗衣機|中庭_曬衣桿|中庭_草地|浴廁_小便斗(?!區)|浴廁_感應器|中庭_冷氣室外機|_小冰箱)/;
 export function buildDorm() {
-  const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [], props = [], notes = []; // props：細緻模型（main 用 props.js 畫；方塊只留碰撞，見 NO_DRAW）
+  const solid = [], deco = [], spots = [], patrol = [], lights = [], signs = [], terrazzo = [], diag = [], rots = [], prisms = [], doors = [], beams = [], tplanes = [], sprisms = [], fogs = [], props = [], notes = []; let fallDoor = null; // props：細緻模型（main 用 props.js 畫；方塊只留碰撞，見 NO_DRAW）
   const F = 3.35, H2 = F + 4.0, F3 = H2 + 0.2, TOP = F3 + 3.0; // 二樓地坪、二樓天花板、三樓地坪、樓梯間頂
   const C = {
     wall: 0xcbc0aa, wallR: 0xbab4ad, wallL: 0xc4bcae, floorR: 0x9a9287, corr: 0x6a6258, slab: 0x777b7d, ceil: 0x2c2a26, skirt: 0x161412,
@@ -524,7 +524,7 @@ export function buildDorm() {
     for (let y = wy0 + 0.13; y < wy1 - 0.08; y += 0.13) D_('浴廁_百葉', wx0 + 0.03, wx1 - 0.03, BZ0 + 0.0, BZ0 + 0.04, y, y + 0.012, 0xb4b7b6);
   }
   // ---------- 隔間排（open：開口方向 'E' 或 'W'；back、front：背牆與開口的 x）----------
-  const column = (kind, back, front, open) => {
+  const column = (kind, back, front, open, oldDoor) => { // oldDoor：最靠走道那間（k = 3）的門是老舊、會倒下來的那扇
     const dir = open === 'E' ? -1 : 1; // 從開口往內
     const xa = Math.min(back, front), xb = Math.max(back, front), toilet = kind === 'stall';
     const L = (CZ1 - CZ0) / 4;
@@ -553,6 +553,11 @@ export function buildDorm() {
       // 隔間正面：一片固定面板＋一扇門（平常半開，躲進去時關上）
       const DWd = 1.0, hz = z1 - 0.04, ang = 1.15, vx = dir * Math.sin(ang), vz = -Math.cos(ang);
       S_('浴廁_隔間前板', front - 0.03, front + 0.03, z0 + 0.03, hz - DWd, F2, F2 + 2.0, C.stall);
+      if (oldDoor && k === 3) { // 老舊的門：整片往走道外翻開、斜斜掛著；玩家看著它時會倒下來（main.js 的 updateFallDoor）
+        fallDoor = { x: front - dir * 0.03, z0: hz, z1: hz + DWd, y0: F + 0.06, h: 1.85, floor: F, edge: z1, fall: dir, c: C.stall }; // 門整片往外翻開到走道上、只剩一個鉸鏈掛著；倒下時往走道那邊（玩家來的方向）拍下去
+        D_('浴廁_門牌', front - 0.035, front + 0.035, hz - DWd - 0.35, hz - DWd - 0.15, F2 + 1.6, F2 + 1.72, C.white);
+        continue;
+      }
       rots.push({ n: '浴廁_隔間門', x: front + vx * DWd / 2, z: hz + vz * DWd / 2, wa: DWd, wb: 0.04, y0: F2 + 0.1, y1: F2 + 1.95, ry: Math.atan2(vx, vz), c: C.stall });
       D_('浴廁_門牌', front - 0.035, front + 0.035, hz - DWd - 0.35, hz - DWd - 0.15, F2 + 1.6, F2 + 1.72, C.white);
       spots.push({ kind, room: toilet ? '廁所' : '浴室', x0: xa + 0.06, x1: xb - 0.06, z0: z0 + 0.06, z1: z1 - 0.06, cx: front + dir * 0.45, cz: hz - DWd / 2, floor: F, camY: F2 + (toilet ? 1.0 : 1.3), lookYaw: open === 'E' ? -Math.PI / 2 : Math.PI / 2,
@@ -563,7 +568,7 @@ export function buildDorm() {
   // 左半部：浴室
   column('shower', bx(88), bx(148), 'E');
   column('shower', bx(275), bx(230), 'W'); backWall(275, 300); column('shower', bx(300), bx(372), 'E');
-  column('shower', bx(503), bx(440), 'W'); backWall(503, 522);
+  column('shower', bx(503), bx(440), 'W', true); backWall(503, 522); // 最靠走廊入口那排：外間的門老舊會倒
   // 洗衣機（黃）與飲水機（紫）：靠在背牆東側
   for (const py of [717, 818, 916]) { const z = bz(py); props.push({ k: 'washer', x0: bx(522), x1: bx(522) + 0.62, z0: z - 0.31, z1: z + 0.31, y: FP, face: 'E' }); S_('浴廁_洗衣機', bx(522), bx(522) + 0.62, z - 0.31, z + 0.31, FP, FP + 0.88, 0xe2e2dc); D_('浴廁_洗衣機蓋', bx(522) + 0.1, bx(522) + 0.52, z - 0.21, z + 0.21, FP + 0.88, FP + 0.9, 0x9aa0a6); }
   { const z = bz(993); props.push({ k: 'disp', x0: bx(522), x1: bx(522) + 0.45, z0: z - 0.25, z1: z + 0.25, y: FP, face: 'E' }); S_('浴廁_飲水機', bx(522), bx(522) + 0.45, z - 0.25, z + 0.25, FP, FP + 1.3, C.disp); D_('浴廁_飲水機面板', bx(522) + 0.45, bx(522) + 0.47, z - 0.18, z + 0.18, FP + 0.95, FP + 1.2, C.black); }
@@ -714,6 +719,7 @@ export function buildDorm() {
   for (const o of [tv, remote, hou]) if (o) o.x = mx(o.x, C2);
   for (const bg of bags) bg[1] += XS;
   for (const nt of notes) nt.x = mx(nt.x, C2);
+  if (fallDoor) fallDoor.x += XS;
   for (const p of props) { const c = p.y > 3 ? C2 : C1; if (p.x !== undefined) p.x = mx(p.x, c); if (p.x0 !== undefined) { if (p.x0 >= c) { p.x0 += XS; p.x1 += XS; } else if (p.x1 > c) p.x1 += XS; } }
   // 晒衣場：草地、曬衣桿（木樁＋鐵鍊）用最終座標從方塊取出
   for (const b of deco) if (b.n === '中庭_草地') props.push({ k: 'grass', x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, y: 0 });
@@ -752,7 +758,7 @@ export function buildDorm() {
     if (m < r * 6) continue; props.push({ k: 'tube', ax: 'xyz'[ai], x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, r, c: b.c }); b.noDraw = true;
   }
   return {
-    notes, solid, deco, spots, patrol, lights, signs, props, NO_DRAW, terrazzo, diag, rots, prisms, doors, beams, tplanes, sprisms, fogs, extra, tv, remote, hou, bags, rooms,
+    notes, fallDoor, solid, deco, spots, patrol, lights, signs, props, NO_DRAW, terrazzo, diag, rots, prisms, doors, beams, tplanes, sprisms, fogs, extra, tv, remote, hou, bags, rooms,
     F, H2, DOOR: { ...DOOR, z: ZB }, spawn: { x: DOOR.x, y: 0, z: ZB - 0.9 }, npc: { x: DOOR.x, y: 0, z: ZB - 3.2 },
     bathZ: ZR0, wheyDesk: '二樓_208房_書桌1', XS, altVia: { x: -13.4 + XS, y: F, z: ZR0 + 1.6 },
     exitSign: { x: DOOR.x, y: 2.78, z: ZB - 0.02 }, outside: { x: DOOR.x, z: ZB + 5, w: 14, d: 10 },

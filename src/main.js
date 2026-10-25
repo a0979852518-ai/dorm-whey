@@ -298,7 +298,7 @@
     if (tint) { m.color = new THREE.Color(tint); m.specular = new THREE.Color(0x050505); m.shininess = 3; }
     const mesh = new THREE.Mesh(g, m); mesh.userData.w = w; scene.add(mesh); return mesh;
   }
-  let ENEMY_EMI = 0, npcMesh, enemyMesh, wheyMesh, potMesh, stunMesh, houMesh, panMesh; const TEX = {}, BAGS = [];
+  const ERUN = { frames: null, geo: null, still: null, cur: -1 }; let ENEMY_EMI = 0, npcMesh, enemyMesh, wheyMesh, potMesh, stunMesh, houMesh, panMesh; const TEX = {}, BAGS = [];
   const HOU = DORM.hou;
   // 電視：螢幕（自發光）、雜訊畫面、照到交誼廳的螢幕光
   const TV = { on: 0, mesh: null, light: null, tex: [], noise: null, staticT: 0, remoteMesh: null, remoteInWorld: true };
@@ -317,6 +317,8 @@
       m.rotation.x = -Math.PI / 2; m.rotation.z = 0.5; m.position.set(r.x, r.y + 0.018, r.z); scene.add(m); TV.remoteMesh = m; }
     npcMesh = billboard(t1, 1.78, 0x050505, 0x8a8a8a);
     enemyMesh = billboard(t2, 1.9, 0x2a0606, 0x9a8e8e); ENEMY_EMI = enemyMesh.material.emissive.getHex(); enemyMesh.visible = false;
+    ERUN.still = { map: t2, geo: enemyMesh.geometry };
+    Promise.all([1, 2, 3, 4, 5].map((k) => loadTex(A['kemao_run' + k]))).then((ts) => { ERUN.frames = ts; const h = 1.9, w = h * ts[0].image.width / ts[0].image.height; ERUN.geo = new THREE.PlaneGeometry(w, h); ERUN.geo.translate(0, h / 2, 0); }); // 追逐時的跑步動圖（5 張）
     wheyMesh = billboard(tw, 0.3, 0x15110a);
     potMesh = billboard(tp, 0.26, 0x0e0e0e);
     const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d'); g.font = '900 40px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.fillStyle = '#ffd25a'; g.fillText('✶ 暈 眩 ✶', 128, 46);
@@ -1416,6 +1418,11 @@
       const st = enemy.stun > 0; const bob = enemy.moving ? Math.abs(Math.sin(performance.now() / (enemy.state === 'chase' ? 90 : 160))) * 0.06 : 0;
       enemyMesh.position.set(enemy.x + (st ? Math.sin(performance.now() / 70) * 0.04 : 0), enemy.y + bob, enemy.z);
       enemyMesh.rotation.z = st ? Math.sin(performance.now() / 130) * 0.22 : 0;
+      if (ERUN.frames) { // 追著跑的時候換成跑步動圖，其他時候（站著、走路搜尋、暈眩）是原本那張
+        const run = !st && enemy.moving && (enemy.state === 'chase' || enemy.state === 'hunt') && !G.bedScene;
+        const f = run ? Math.floor(performance.now() / 85) % 5 : -1;
+        if (f !== ERUN.cur) { ERUN.cur = f; const M = enemyMesh.material, tx = f < 0 ? ERUN.still.map : ERUN.frames[f]; M.map = tx; M.emissiveMap = tx; enemyMesh.geometry = f < 0 ? ERUN.still.geo : ERUN.geo; M.needsUpdate = true; }
+      }
       const fx = Math.sin(enemy.yaw), fz = Math.cos(enemy.yaw);
       // 聚光燈放在他身體中心，避免他貼牆時光源跑進牆裡、照到隔壁房間
       eSpot.position.set(enemy.x + fx * 0.12, enemy.y + 1.55, enemy.z + fz * 0.12); if (world.pointSolid(eSpot.position.x, eSpot.position.y, eSpot.position.z)) eSpot.position.set(enemy.x, enemy.y + 1.55, enemy.z); eSpot.target.position.set(enemy.x + fx * 5, enemy.y + 0.2, enemy.z + fz * 5);
@@ -1531,5 +1538,5 @@
 
   // 測試用
   enemy.altVia = DORM.altVia; // 晒衣場室外樓梯頂端的平台（二樓浴廁旁）
-  window.__game = { caught, FD, ZHU, camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
+  window.__game = { ERUN, em: () => enemyMesh, caught, FD, ZHU, camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
 })();

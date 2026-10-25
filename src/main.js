@@ -383,6 +383,7 @@
         const d = out(AU.sfx, undefined, 0, 0, tile ? 0.5 : inRoom ? 0.25 : yard ? 0.05 : 0.2);
         const g = (land ? 0.7 : run ? 0.5 : 0.32) * rand(0.85, 1.1) * (yard ? 0.55 : 1) * (land ? 1 : 1 - 0.6 * (P.cr || 0)); // 蹲著走腳步很輕
         if (playStep(set, d, g * (0.55 + 0.45 * Math.min(1, amp)), (run ? 1.1 : 0.97) * rand(0.95, 1.05), yard ? 700 : inRoom ? 3200 : 0, foot * (run ? 0.1 : 0.16))) { // 左右腳輪流稍微偏左偏右（跟鏡頭左右晃同步）；起步、停下時比較輕
+          if (G.broken && foot > 0) noiseHit(d, t + 0.05, 'bandpass', rand(500, 700), 0.8, g * 0.35, 0.03, 0.28); // 骨折那隻腳拖在地上
           if (run && !yard) noiseHit(d, t + 0.06, 'bandpass', rand(1800, 2600), 0.9, g * 0.06, 0.004, 0.05); // 跑步時腳尖蹬地的擦聲
           if (stair) tone(d, t, 'triangle', rand(160, 190), 120, g * 0.12, 0.003, 0.1); // 樓梯的空心感
           if (yard) noiseHit(d, t + 0.01, 'bandpass', rand(2500, 3500), 0.8, g * 0.08, 0.01, 0.08); // 踩草的沙沙聲
@@ -416,6 +417,16 @@
       tone(d, t, 'sine', 95, 38, 1.1, 0.003, 0.32); noiseHit(d, t, 'lowpass', 1400, 0.8, 1.0, 0.001, 0.22); noiseHit(d, t, 'bandpass', 3200, 1.2, 0.35, 0.001, 0.09);
       playStep('step_heavy', d, 1.5, 0.62, 2500);
       for (const [dt, gv] of [[0.16, 0.35], [0.27, 0.16], [0.34, 0.07]]) { noiseHit(d, t + dt, 'lowpass', 1100, 0.8, gv, 0.001, 0.08); tone(d, t + dt, 'sine', 120, 60, gv * 0.6, 0.002, 0.1); }
+    },
+    boneBreak() { // 骨頭喀啦斷掉（尖銳的斷裂聲＋悶悶的摔落＋低頻的「咚」）
+      if (!AU.ctx) return; const t = AU.ctx.currentTime, d = out(AU.sfx, undefined, 0, 0, 0.2);
+      playStep('step_heavy', d, 1.1, 0.8, 0);
+      tone(d, t, 'sine', 70, 35, 0.9, 0.003, 0.3);
+      for (const [dt, f, gv] of [[0.02, 3200, 0.9], [0.035, 2400, 0.7], [0.05, 4100, 0.5], [0.07, 1800, 0.4]]) noiseHit(d, t + dt, 'bandpass', f, 3, gv, 0.0005, 0.02); // 喀啦
+      noiseHit(d, t + 0.03, 'highpass', 1500, 0.7, 0.35, 0.001, 0.06);
+      // 吃痛的悶哼（低沉的喉音）
+      const C = AU.ctx, o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(150, t + 0.25); o.frequency.linearRampToValueAtTime(105, t + 0.9);
+      const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; const g = C.createGain(); env(g, t + 0.25, 0.06, 0.12, 0.6); o.connect(f); f.connect(g); g.connect(d); o.start(t + 0.25); o.stop(t + 1.0);
     },
     zhuStep(x, y, z) { // 竹竿穿拖鞋跑步：啪噠啪噠
       if (!AU.ctx) return; const t = AU.ctx.currentTime, d = out(AU.sfx, x, y + 0.1, z, 0.35);
@@ -1053,7 +1064,7 @@
     Object.assign(G, { phase: 'intro', paused: false, enemyDist: 99, chaseMix: 0, enemySpeedMul: 1, items: [], cur: -1, hold: 0, holding: false, questT: 0, hintShown: false, sips: 0, hits: 0, startTime: performance.now(), bed: null, target: null, shake: 0 });
     enemy.reset(); enemyMesh.visible = false; npcMesh.visible = true; npcMesh.position.set(npcPos.x, 0, npcPos.z); npcBox.on = true; doorBox.on = true;
     eSpot.intensity = 0; eGlow.intensity = 0; eSpot.color.setHex(0xff1410); stunMesh.visible = false;
-    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
+    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
     spawnItems(); renderSlots(); tvReset();
     for (const d of DOORS) { d.open = false; d.ang = 0; d.piv.rotation.y = d.base; d.box.on = true; }
     MAIN.open = false; MAIN.ang = 0; for (const l of MAIN.leaves) l.piv.rotation.y = 0;
@@ -1263,6 +1274,12 @@
   // ---------- 主迴圈 ----------
   let last = performance.now();
   const eyeH = () => K.EYE - 0.62 * (P.cr || 0); // 蹲下時眼睛高度降低約 60 cm
+  function breakLeg() { // 骨折：喀啦一聲＋重重摔落、畫面一紅、之後一整局一拐一拐不能跑
+    G.broken = true; G.walk.land = 1; G.shake = Math.max(G.shake || 0, 1.0); P.stamina = Math.min(P.stamina, 40);
+    try { SFX.boneBreak(); } catch (e) { }
+    ui.danger.style.transition = 'none'; ui.danger.style.opacity = 1; G.hurtT = 1.6;
+    toast('你從太高的地方跳下來，腳骨折了……（之後只能一拐一拐地走，不能跑）', 4200);
+  }
   function update(dt) {
     updateDoors(dt); updatePan(dt); updateZhu(dt); updateFallDoor(dt);
     if ((G.boostT || 0) > 0 && !G.paused && !dlgState) { G.boostT -= dt; if (G.boostT <= 0) toast('菸的效果退了', 1800); }
@@ -1276,10 +1293,10 @@
       if (P.exhausted && P.stamina >= 35) P.exhausted = false;
       P.crouch = !!(keys.ControlLeft || keys.ControlRight) && P.grounded; // 按住 Ctrl 蹲下：走得很慢、腳步很輕、不能跑，比較不容易被看到、聽到
       P.cr = (P.cr || 0) + ((P.crouch ? 1 : 0) - (P.cr || 0)) * (1 - Math.exp(-dt * 9));
-      P.running = !!(want && P.stamina > 0 && !P.exhausted && !ZHU.slow && !P.crouch); // 看到竹竿時被迫用走的
+      P.running = !!(want && P.stamina > 0 && !P.exhausted && !ZHU.slow && !P.crouch && !G.broken); // 看到竹竿時被迫用走的
       if (P.running) P.stamina = Math.max(0, P.stamina - 15 * dt); else P.stamina = Math.min(100, P.stamina + 10 * dt);
       const sp = (P.running ? 5.0 : 1.55) * // 走路放慢（探索時壓抑的步調），跑步不變（捲毛追逐的平衡）
-         ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1) * (1 - 0.48 * P.cr);
+         ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1) * (1 - 0.48 * P.cr) * (G.broken ? 0.6 : 1); // 骨折：一拐一拐、只剩六成速度
       if (moving) {
         const l = Math.hypot(mx, mz); mx /= l; mz /= l;
         const s = Math.sin(P.yaw), c = Math.cos(P.yaw);
@@ -1295,7 +1312,12 @@
       if (keys.Space && P.grounded && !dlgState) { P.vy = 4.3; P.grounded = false; }
       const wasAir = !P.grounded, vyPrev = P.vy;
       world.vertical(P, dt);
-      if (wasAir && P.grounded && vyPrev < -2.5) { G.walk.land = Math.min(1, -vyPrev / 7); SFX.step(true, false, false, true); }
+      if (!P.grounded) G.airTop = Math.max(G.airTop ?? P.y, P.y); // 這次騰空的最高點
+      if (wasAir && P.grounded) {
+        const drop = (G.airTop ?? P.y) - P.y; G.airTop = null;
+        if (drop > 2.5 && vyPrev < -6.5 && !G.broken) breakLeg(); // 同時看落地速度（約 2.4 m 以上的自由落體），傳送、躲床出來不會誤判 // 從約二樓的高度直接跳下來 → 骨折
+        else if (vyPrev < -2.5) { G.walk.land = Math.min(1, -vyPrev / 7); SFX.step(true, false, false, true); }
+      }
       // 晃動幅度平滑過渡（起步、停下、走跑切換）
       const k = 1 - Math.exp(-dt * 3.5);
       G.walk.amp += ((moving && P.grounded ? 1 : 0) - G.walk.amp) * k; G.walk.run += ((P.running && moving ? 1 : 0) - G.walk.run) * k;
@@ -1306,7 +1328,7 @@
     } else if (!P.hidden) { P.crouch = false; P.running = false; P.stamina = Math.min(100, P.stamina + 10 * dt); }
     else { P.running = false; P.stamina = Math.min(100, P.stamina + 10 * dt); }
     // 體力條
-    ui.stamina.style.transform = `scaleX(${P.stamina / 100})`; ui.staminaWrap.classList.toggle('empty', !!P.exhausted); ui.staminaLbl.textContent = P.exhausted ? '體力耗盡 · 恢復中' : 'SHIFT 奔跑'; ui.staminaWrap.classList.toggle('low', P.stamina < 30);
+    ui.stamina.style.transform = `scaleX(${P.stamina / 100})`; ui.staminaWrap.classList.toggle('empty', !!P.exhausted); ui.staminaLbl.textContent = G.broken ? '腳骨折 · 不能跑' : P.exhausted ? '體力耗盡 · 恢復中' : 'SHIFT 奔跑'; ui.staminaWrap.classList.toggle('low', P.stamina < 30);
     // 互動提示
     G.target = active && !P.hidden ? findTarget() : null;
     ui.prompt.textContent = P.hidden ? '躲藏中 · 按 F 離開' : G.target ? G.target.text : '';
@@ -1362,7 +1384,8 @@
       if (l.positionX) { l.positionX.value = cp.x; l.positionY.value = cp.y; l.positionZ.value = cp.z; l.forwardX.value = fx; l.forwardY.value = 0; l.forwardZ.value = fz; l.upX.value = 0; l.upY.value = 1; l.upZ.value = 0; } else { l.setPosition(cp.x, cp.y, cp.z); l.setOrientation(fx, 0, fz, 0, 1, 0); }
     }
     // 危險暈影
-    const danger = G.phase === 'chase' ? clamp(1 - G.enemyDist / 12, 0, 1) * (P.hidden ? 0.7 : 1) : 0;
+    let danger = G.phase === 'chase' ? clamp(1 - G.enemyDist / 12, 0, 1) * (P.hidden ? 0.7 : 1) : 0;
+    if (G.hurtT > 0) { G.hurtT -= dt; danger = Math.max(danger, Math.min(1, G.hurtT / 1.2)); if (G.hurtT <= 0) ui.danger.style.transition = ''; } // 骨折那一下畫面變紅再慢慢退
     ui.danger.style.opacity = String(danger * (0.75 + 0.25 * Math.sin(performance.now() / 180)));
   }
   const camPos = new THREE.Vector3(), fwd = new THREE.Vector3();
@@ -1394,8 +1417,9 @@
       const kk = Wk.kick * Wk.kick;
       let up = -(r > 0.5 ? Math.pow(s2, 1.6) : s2) * (0.045 + 0.03 * r) * A;   // 每一步下沉：走路是大而慢的起伏，跑步落地更頓
       up -= kk * (0.007 + 0.014 * r) * A;
+      if (G.broken) { up -= Math.max(0, Math.sin(ph)) * 0.05 * A; roll += 0; } // 一拐一拐：踩到受傷那隻腳時身體往下沉
       side = Math.sin(ph) * (0.03 + 0.012 * r) * A;                         // 左右重心轉移（走路時身體會明顯左右換腳）
-      roll = Math.sin(ph) * (0.008 + 0.008 * r) * A;                        // 身體側傾
+      roll = Math.sin(ph) * (0.008 + 0.008 * r) * A + (G.broken ? Math.max(0, Math.sin(ph)) * 0.035 * A : 0); // 身體側傾（骨折時往受傷那側歪）
       tilt = Math.sin(2 * ph) * 0.0025 * (1 - r) * A + Math.cos(2 * ph) * 0.006 * r * A + kk * (0.003 + 0.006 * r) * A; // 走路微微點頭、跑步點頭、落地往下頓
       const heave = Math.sin(t * (1.4 + G.exert * 2.6)) * (0.004 + G.exert * 0.016); // 呼吸起伏，喘越大越明顯
       Wk.land = Math.max(0, Wk.land - dt * 3.2);

@@ -2266,13 +2266,14 @@ function buildProps(DORM, scene) {
       if (!d.open && Math.abs(d.ang) < 0.05) d.box.on = true;
     }
   }
-  function billboard(tex, h, emissive) {
+  function billboard(tex, h, emissive, tint) { // tint：人物照片比場景亮很多，乘上一個比較暗的顏色，讓他們跟環境光一致
     const w = h * tex.image.width / tex.image.height; const g = new THREE.PlaneGeometry(w, h); g.translate(0, h / 2, 0);
     const m = new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a,  map: tex, alphaTest: 0.45, side: THREE.DoubleSide });
     if (emissive) { m.emissive = new THREE.Color(emissive); m.emissiveMap = tex; }
+    if (tint) { m.color = new THREE.Color(tint); m.specular = new THREE.Color(0x050505); m.shininess = 3; }
     const mesh = new THREE.Mesh(g, m); mesh.userData.w = w; scene.add(mesh); return mesh;
   }
-  let npcMesh, enemyMesh, wheyMesh, potMesh, stunMesh, houMesh, panMesh; const TEX = {}, BAGS = [];
+  let ENEMY_EMI = 0, npcMesh, enemyMesh, wheyMesh, potMesh, stunMesh, houMesh, panMesh; const TEX = {}, BAGS = [];
   const HOU = DORM.hou;
   // 電視：螢幕（自發光）、雜訊畫面、照到交誼廳的螢幕光
   const TV = { on: 0, mesh: null, light: null, tex: [], noise: null, staticT: 0, remoteMesh: null, remoteInWorld: true };
@@ -2285,12 +2286,12 @@ function buildProps(DORM, scene) {
   const ready = Promise.all([loadTex(A.p1), loadTex(A.p2), loadTex(A.whey), loadTex(A.pot), loadTex(A.tv1), loadTex(A.tv2), loadTex(A.tv3), loadTex(A.tv4), loadTex(A.remote), loadTex(A.hou), loadTex(A.bags2), loadTex(A.bag1), loadTex(A.card)]).then(([t1, t2, tw, tp, v1, v2, v3, v4, rm, th, tb2, tb1, tc]) => {
     TV.tex = [v1, v2, v3, v4]; TEX.whey = tw; TEX.pot = tp; TEX.remote = rm; TEX.card = tc;
     // 208 號房：受傷的侯宸宇（躺在靠窗左側地上）、乳清旁的垃圾袋
-    houMesh = billboard(th, 0.56, 0x0d0d0d); houMesh.position.set(HOU.x, HOU.y, HOU.z);
+    houMesh = billboard(th, 0.56, 0x050505, 0x8a8a8a); houMesh.position.set(HOU.x, HOU.y, HOU.z);
     for (const [ti, x, z, h] of DORM.bags) { const tx = ti ? tb1 : tb2; const m = billboard(tx, h, 0x050505); m.position.set(x, DORM.F + 0.01, z); BAGS.push(m); world.dyn.push({ n: 'bag', x0: x - 0.22, x1: x + 0.22, z0: z - 0.22, z1: z + 0.22, y0: 3.35, y1: 3.35 + h * 0.85 }); }
     { const r = LNG.remote; const w = 0.06, h = w * rm.image.height / rm.image.width; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a,  map: rm, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x111111, emissiveMap: rm }));
       m.rotation.x = -Math.PI / 2; m.rotation.z = 0.5; m.position.set(r.x, r.y + 0.018, r.z); scene.add(m); TV.remoteMesh = m; }
-    npcMesh = billboard(t1, 1.78, 0x0b0b0b);
-    enemyMesh = billboard(t2, 1.9, 0x5a0d0b); enemyMesh.visible = false;
+    npcMesh = billboard(t1, 1.78, 0x050505, 0x8a8a8a);
+    enemyMesh = billboard(t2, 1.9, 0x2a0606, 0x9a8e8e); ENEMY_EMI = enemyMesh.material.emissive.getHex(); enemyMesh.visible = false;
     wheyMesh = billboard(tw, 0.3, 0x15110a);
     potMesh = billboard(tp, 0.26, 0x0e0e0e);
     const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d'); g.font = '900 40px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.fillStyle = '#ffd25a'; g.fillText('✶ 暈 眩 ✶', 128, 46);
@@ -2721,7 +2722,7 @@ function buildProps(DORM, scene) {
   // ---------- 手電筒 ----------
   // 222 號房：潘柏翰（一開門就貼臉出現）
   loadTex(A.cig).then((t) => { TEX.cig = t; });
-  loadTex(A.pan).then((t) => { panMesh = billboard(t, 1.76, 0x0c0c0c); panMesh.visible = false; });
+  loadTex(A.pan).then((t) => { panMesh = billboard(t, 1.76, 0x050505, 0x8a8a8a); panMesh.visible = false; });
   // ---------- 浴室外間老舊的門：玩家看著它、距離剛好時倒下來（沒看到不會倒）----------
   const FD = { d: DORM.fallDoor, st: 'up', t: 0, piv: null, box: null };
   if (FD.d) { const d = FD.d, W = d.z1 - d.z0;
@@ -2756,7 +2757,7 @@ function buildProps(DORM, scene) {
   }
   // ---------- 竹竿：222 和 210 門前、走廊正中間站著不動；看得到他時玩家被迫用走的，靠近一點他就朝玩家跑過來、擦身而過跑掉（不會傷人）----------
   const ZHU = { meshes: null, st: 'idle', slow: false };
-  Promise.all([A.zhu_stand, A.zhu_run1, A.zhu_run2].map((u) => loadTex(u))).then((ts) => { ZHU.meshes = ts.map((t) => { const m = billboard(t, 1.74, 0x0c0c0c); m.visible = false; return m; }); zhuReset(); });
+  Promise.all([A.zhu_stand, A.zhu_run1, A.zhu_run2].map((u) => loadTex(u))).then((ts) => { ZHU.meshes = ts.map((t) => { const m = billboard(t, 1.74, 0x040404, 0x777777); m.visible = false; return m; /* 竹竿白 T 恤特別亮，再暗一點 */ }); zhuReset(); });
   function zhuReset() {
     const da = DORM.doors.find((x) => x.no === 222), db = DORM.doors.find((x) => x.no === 210); // 站在 222 和 210 門口中間
     Object.assign(ZHU, { st: 'idle', slow: false, said: false, passed: false, t: 0, stepT: 0, wp: null, x: DORM.XS, z: da && db ? (da.cz + db.cz) / 2 : -18.8 });
@@ -3050,7 +3051,7 @@ function buildProps(DORM, scene) {
     Object.assign(G, { phase: 'intro', paused: false, enemyDist: 99, chaseMix: 0, enemySpeedMul: 1, items: [], cur: -1, hold: 0, holding: false, questT: 0, hintShown: false, sips: 0, hits: 0, startTime: performance.now(), bed: null, target: null, shake: 0 });
     enemy.reset(); enemyMesh.visible = false; npcMesh.visible = true; npcMesh.position.set(npcPos.x, 0, npcPos.z); npcBox.on = true; doorBox.on = true;
     eSpot.intensity = 0; eGlow.intensity = 0; eSpot.color.setHex(0xff1410); stunMesh.visible = false;
-    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; G.hbForce = false; if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
+    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; G.hbForce = false; G.bedScene = false; if (enemyMesh) enemyMesh.material.emissive.setHex(ENEMY_EMI); if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
     spawnItems(); renderSlots(); tvReset();
     for (const d of DOORS) { d.open = false; d.ang = 0; d.piv.rotation.y = d.base; d.box.on = true; }
     MAIN.open = false; MAIN.ang = 0; for (const l of MAIN.leaves) l.piv.rotation.y = 0;
@@ -3083,7 +3084,8 @@ function buildProps(DORM, scene) {
   }
   // 躲在上舖被抓：他已經在床底下（看不到的位置）。強制動畫：在床上喘氣、頭慢慢左右探 → 往床邊看 → 他的頭從床緣下慢慢探上來 → 盯著你 → 死亡
   async function bedCatchScene(b) {
-    const C = AU.ctx; let br = null, brG = null; G.hbForce = true;
+    const C = AU.ctx; let br = null, brG = null; G.hbForce = true; G.bedScene = true; enemy.active = false; // 不要他的吼叫、追逐語音
+    try { chaseVoiceStop(); } catch (e) { } eSpot.intensity = 0; eGlow.intensity = 0; enemyMesh.material.emissive.setHex(0x000000); // 也不要他身上的紅光
     ui.hideFx.hidden = true; ui.prompt && (ui.prompt.hidden = true);
     try { bgmStop(0.6); chaseVoiceStop(); mixTo(AU.chase, 0, 0.6); mixTo(AU.horror, 0.35, 1.5); } catch (e) { }
     if (C && AU.voice && AU.voice.breath) { br = C.createBufferSource(); br.buffer = AU.voice.breath; br.loop = true; brG = C.createGain(); brG.gain.value = 0; brG.gain.setTargetAtTime(0.9, C.currentTime, 0.4); br.connect(brG); brG.connect(AU.sfx); br.start(); } // 自己在被子裡喘氣
@@ -3393,7 +3395,7 @@ function buildProps(DORM, scene) {
       eSpot.position.set(enemy.x + fx * 0.12, enemy.y + 1.55, enemy.z + fz * 0.12); if (world.pointSolid(eSpot.position.x, eSpot.position.y, eSpot.position.z)) eSpot.position.set(enemy.x, enemy.y + 1.55, enemy.z); eSpot.target.position.set(enemy.x + fx * 5, enemy.y + 0.2, enemy.z + fz * 5);
       eGlow.position.set(enemy.x + fx * 0.15, enemy.y + 1.15, enemy.z + fz * 0.15);
       const base = G.sips >= 2 ? 5.6 : 4.2; const flick = st ? (Math.random() < 0.3 ? 0.2 : 0.6) : 0.9 + Math.random() * 0.12;
-      if (G.phase === 'chase' || G.phase === 'dead') { eSpot.intensity = base * flick; eGlow.intensity = 1.4 * flick; }
+      if (G.bedScene) { eSpot.intensity = 0; eGlow.intensity = 0; } else if (G.phase === 'chase' || G.phase === 'dead') { eSpot.intensity = base * flick; eGlow.intensity = 1.4 * flick; }
       stunMesh.visible = st; if (st) stunMesh.position.set(enemy.x, enemy.y + 2.15 + Math.sin(performance.now() / 200) * 0.05, enemy.z);
       G.enemyDist = enemy.active ? Math.hypot(enemy.x - P.x, (enemy.y - P.y) * 1.5, enemy.z - P.z) : 99;
     } else G.enemyDist = 99;

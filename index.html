@@ -3380,7 +3380,8 @@ function buildProps(DORM, scene) {
         else if (ev === 'picked') { if (G.lureDrop) { removeDrop(G.lureDrop); toast('他撿走了冷氣卡……', 2200); } G.lureDrop = null; }
       }
       if (enemy.active && !AU.cv) chaseVoiceStart();
-      chaseVoiceUpdate(enemy.active && enemy.stun <= 0 && (enemy.state === 'chase' || enemy.state === 'hunt') && !G.paused);
+      const bedHunt = enemy.state === 'hunt' && P.hidden && G.bed && G.bed.kind === 'bed'; // 發現你躲在床上：不吼、不追逐音樂，悄悄走到床邊
+      chaseVoiceUpdate(enemy.active && enemy.stun <= 0 && (enemy.state === 'chase' || (enemy.state === 'hunt' && !bedHunt)) && !G.paused);
       if (enemy.active && enemy.moving && enemy.stun <= 0) { enemy._st = (enemy._st || 0) + dt * enemy.speed; if (enemy._st > 1.25) { enemy._st = 0; SFX.enemyStep(enemy.x, enemy.y, enemy.z, enemy.state === 'chase'); } }
       if (G.phase === 'chase' && P.z > DOOR.z + 0.7 && P.y < 1.2 && Math.abs(P.x - DOOR.x) < 3.5 && !P.hidden) escape();
     }
@@ -3401,7 +3402,7 @@ function buildProps(DORM, scene) {
     } else G.enemyDist = 99;
     // 音樂混音
     if (AU.ctx) {
-      const chasing = G.phase === 'chase' && (enemy.state === 'chase' || enemy.state === 'hunt') && enemy.stun <= 0;
+      const chasing = G.phase === 'chase' && (enemy.state === 'chase' || (enemy.state === 'hunt' && !(P.hidden && G.bed && G.bed.kind === 'bed'))) && enemy.stun <= 0;
       G.chaseMix = chasing ? 1 : Math.max(0, G.chaseMix - dt * 0.4);
       mixTo(AU.chase, G.phase === 'chase' ? G.chaseMix * 0.32 : 0, chasing ? 0.3 : 1.2);
       if (AU.bgmSrc) mixTo(AU.bgmG, (0.48 + G.chaseMix * 0.32) * (P.hidden && G.enemyDist < 8 ? 0.55 : 1), 0.9);

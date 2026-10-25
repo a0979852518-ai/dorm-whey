@@ -336,7 +336,7 @@
     for (const k of ['amb', 'horror', 'chase', 'hb', 'sfx']) { AU[k] = C.createGain(); AU[k].connect(AU.master); }
     AU.horror.gain.value = 0; AU.chase.gain.value = 0; AU.hb.gain.value = 0;
     AU.noise = noiseBuf(C, 2);
-    AU.voice = {}; for (const k of ['roar1', 'roar2', 'c_huan', 'c_bie', 'c_zhan', 'c_ah', 'c_ruqing', 'bgm_chase', 'chase_loop', 'breath', 'step_soft', 'step_hard', 'step_heavy', 'door_crash']) { try { C.decodeAudioData(b64ToAB(A[k]), (buf) => { AU.voice[k] = buf; }, () => { }); } catch (e) { } }
+    AU.voice = {}; for (const k of ['roar1', 'roar2', 'c_huan', 'c_bie', 'c_zhan', 'c_ah', 'c_ruqing', 'bgm_chase', 'chase_loop', 'breath', 'step_soft', 'step_hard', 'step_heavy', 'door_crash', 'drag', 'heartbeat']) { try { C.decodeAudioData(b64ToAB(A[k]), (buf) => { AU.voice[k] = buf; }, () => { }); } catch (e) { } }
     // 環境低鳴
     const lp = C.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 150; const ag = C.createGain(); ag.gain.value = 0.07; lp.connect(ag); ag.connect(AU.amb);
     for (const f of [41.2, 41.75, 61.9]) { const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(); }
@@ -381,9 +381,20 @@
       { // 真實錄音的腳步聲（使用者提供）：浴廁磁磚 → 硬底清脆的；寢室 → 悶一點；晒衣場草地 → 很悶很小聲；其他（磨石子走廊、大廳、樓梯）→ 一般室內腳步；跳下落地 → 重的
         const yard = P.y < 1 && P.z < -0.8 && P.x > -24.5, set = land ? 'step_heavy' : tile ? 'step_hard' : 'step_soft';
         const d = out(AU.sfx, undefined, 0, 0, tile ? 0.5 : inRoom ? 0.25 : yard ? 0.05 : 0.2);
+        if (G.broken && foot > 0 && !land && AU.voice.drag) { // 骨折那隻腳不踩地：沒有腳步聲，播使用者提供的拖地錄音（兩段隨機挑一段）
+          const sg = Math.random() < 0.5 ? [0.02, 0.85] : [0.99, 1.36], s3 = AU.ctx.createBufferSource(); s3.buffer = AU.voice.drag; s3.playbackRate.value = rand(0.95, 1.05);
+          const g3 = AU.ctx.createGain(); g3.gain.value = (yard ? 0.35 : 0.75) * rand(0.85, 1.1); let n3 = s3; if (yard) { const lp = AU.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; s3.connect(lp); n3 = lp; }
+          n3.connect(g3); g3.connect(d); s3.start(t, sg[0], sg[1]); return;
+        }
+        if (G.broken && foot > 0 && !land) { // （錄音還沒載入時）合成的拖地摩擦聲
+          const C2 = AU.ctx, s2 = C2.createBufferSource(); s2.buffer = AU.noise; const bp = C2.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1; bp.frequency.setValueAtTime(rand(420, 560), t); bp.frequency.linearRampToValueAtTime(rand(800, 1000), t + 0.45);
+          const gg = C2.createGain(); gg.gain.setValueAtTime(0.0001, t); gg.gain.linearRampToValueAtTime((yard ? 0.05 : 0.11) * rand(0.85, 1.1), t + 0.12); gg.gain.linearRampToValueAtTime(0.07, t + 0.35); gg.gain.linearRampToValueAtTime(0.0001, t + 0.55);
+          s2.connect(bp); bp.connect(gg); gg.connect(d); s2.start(t, Math.random() * 1.5); s2.stop(t + 0.6);
+          if (tile) noiseHit(d, t + 0.1, 'highpass', 3000, 0.6, 0.03, 0.05, 0.3);
+          return;
+        }
         const g = (land ? 0.7 : run ? 0.5 : 0.32) * rand(0.85, 1.1) * (yard ? 0.55 : 1) * (land ? 1 : 1 - 0.6 * (P.cr || 0)); // 蹲著走腳步很輕
         if (playStep(set, d, g * (0.55 + 0.45 * Math.min(1, amp)), (run ? 1.1 : 0.97) * rand(0.95, 1.05), yard ? 700 : inRoom ? 3200 : 0, foot * (run ? 0.1 : 0.16))) { // 左右腳輪流稍微偏左偏右（跟鏡頭左右晃同步）；起步、停下時比較輕
-          if (G.broken && foot > 0) noiseHit(d, t + 0.05, 'bandpass', rand(500, 700), 0.8, g * 0.35, 0.03, 0.28); // 骨折那隻腳拖在地上
           if (run && !yard) noiseHit(d, t + 0.06, 'bandpass', rand(1800, 2600), 0.9, g * 0.06, 0.004, 0.05); // 跑步時腳尖蹬地的擦聲
           if (stair) tone(d, t, 'triangle', rand(160, 190), 120, g * 0.12, 0.003, 0.1); // 樓梯的空心感
           if (yard) noiseHit(d, t + 0.01, 'bandpass', rand(2500, 3500), 0.8, g * 0.08, 0.01, 0.08); // 踩草的沙沙聲
@@ -611,7 +622,7 @@
     // 追逐鼓點
     while (AU.nextBeat < now + 0.12) { const t = AU.nextBeat; const n = AU.beatN++; if (G.chaseMix > 0.02) { tone(AU.chase, t, 'sine', 95, 38, 0.9, 0.003, 0.24); if (n % 2 === 1) noiseHit(AU.chase, t, 'bandpass', 1800, 0.8, 0.25, 0.002, 0.09); if (n % 4 === 0) tone(AU.chase, t, 'sawtooth', 55, 52, 0.3, 0.01, 0.3); } AU.nextBeat += 0.36 / Math.min(1.25, G.enemySpeedMul); }
     // 心跳
-    while (AU.nextHB < now + 0.12) { const t = AU.nextHB; const d = G.enemyDist; if (d < 17) { const v = clamp(1 - d / 17, 0, 1); tone(AU.hb, t, 'sine', 62, 40, 0.15 + v * 0.75, 0.01, 0.13); tone(AU.hb, t + 0.21, 'sine', 55, 36, 0.1 + v * 0.55, 0.01, 0.16); AU.nextHB += clamp(1.3 - v * 0.9, 0.42, 1.3); } else AU.nextHB += 0.5; }
+    while (AU.nextHB < now + 0.12) { const t = AU.nextHB; const d = G.hbForce ? 1.5 : G.enemyDist; const hbBuf = AU.voice && AU.voice.heartbeat; if (d < 17 && hbBuf) { const v = clamp(1 - d / 17, 0, 1), s = C.createBufferSource(); s.buffer = hbBuf; s.playbackRate.value = 1 + v * 0.08; const g = C.createGain(); g.gain.value = 0.45 + v * 0.75; s.connect(g); g.connect(AU.hb); s.start(t, ((Math.random() * 4) | 0) * 0.75, 0.72); AU.nextHB += clamp(1.3 - v * 0.9, 0.42, 1.3); } else if (d < 17) { const v = clamp(1 - d / 17, 0, 1); tone(AU.hb, t, 'sine', 62, 40, 0.15 + v * 0.75, 0.01, 0.13); tone(AU.hb, t + 0.21, 'sine', 55, 36, 0.1 + v * 0.55, 0.01, 0.16); AU.nextHB += clamp(1.3 - v * 0.9, 0.42, 1.3); } else AU.nextHB += 0.5; }
     breathTick(now);
     if (now > AU.nextAmbient) { AU.nextAmbient = now + rand(9, 22); if (G.phase !== 'start' && G.phase !== 'dead' && G.phase !== 'won' && G.phase !== 'event') SFX.ambientOne(); }
   }
@@ -1064,7 +1075,7 @@
     Object.assign(G, { phase: 'intro', paused: false, enemyDist: 99, chaseMix: 0, enemySpeedMul: 1, items: [], cur: -1, hold: 0, holding: false, questT: 0, hintShown: false, sips: 0, hits: 0, startTime: performance.now(), bed: null, target: null, shake: 0 });
     enemy.reset(); enemyMesh.visible = false; npcMesh.visible = true; npcMesh.position.set(npcPos.x, 0, npcPos.z); npcBox.on = true; doorBox.on = true;
     eSpot.intensity = 0; eGlow.intensity = 0; eSpot.color.setHex(0xff1410); stunMesh.visible = false;
-    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
+    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; G.hbForce = false; if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
     spawnItems(); renderSlots(); tvReset();
     for (const d of DOORS) { d.open = false; d.ang = 0; d.piv.rotation.y = d.base; d.box.on = true; }
     MAIN.open = false; MAIN.ang = 0; for (const l of MAIN.leaves) l.piv.rotation.y = 0;
@@ -1081,7 +1092,9 @@
   // ---------- 結局 ----------
   async function caught(kind) {
     if (G.phase !== 'chase') return; G.phase = 'dead'; unlockPointer(); keys.KeyW = keys.KeyA = keys.KeyS = keys.KeyD = false;
-    const fromBed = kind === 'bed'; const spotKind = G.bed ? G.bed.kind : 'bed'; if (G.bed && G.bed.doorMesh) G.bed.doorMesh.visible = false;
+    const fromBed = kind === 'bed'; const spotKind = G.bed ? G.bed.kind : 'bed';
+    if (fromBed && spotKind === 'bed' && G.bed) { await bedCatchScene(G.bed); return; }
+    if (G.bed && G.bed.doorMesh) G.bed.doorMesh.visible = false;
     if (fromBed) { ui.hideFx.classList.add('torn'); G.shake = 1.6; await sleep(420); ui.hideFx.hidden = true; ui.hideFx.classList.remove('torn'); P.hidden = false; }
     try { SFX.riser(); } catch (e) { }
     const ty = Math.atan2(P.x - enemy.x, P.z - enemy.z); const y0 = P.yaw; let d = ty - y0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
@@ -1091,6 +1104,42 @@
     await sleep(1500);
     ui.scare.hidden = true; ui.hud.hidden = true;
     ui.deadLine.textContent = fromBed ? (spotKind === 'bed' ? '他看見你爬上床了。' : spotKind === 'stall' ? '他看見你躲進隔間了。' : '他看見你躲到浴簾後面了。') : (G.sips >= 2 ? '你喝了兩口。他不會原諒你。' : '他說過，不准偷喝。');
+    ui.dead.hidden = false; $('btnRetry').focus({ preventScroll: true });
+  }
+  // 躲在上舖被抓：他已經在床底下（看不到的位置）。強制動畫：在床上喘氣、頭慢慢左右探 → 往床邊看 → 他的頭從床緣下慢慢探上來 → 盯著你 → 死亡
+  async function bedCatchScene(b) {
+    const C = AU.ctx; let br = null, brG = null; G.hbForce = true;
+    ui.hideFx.hidden = true; ui.prompt && (ui.prompt.hidden = true);
+    try { bgmStop(0.6); chaseVoiceStop(); mixTo(AU.chase, 0, 0.6); mixTo(AU.horror, 0.35, 1.5); } catch (e) { }
+    if (C && AU.voice && AU.voice.breath) { br = C.createBufferSource(); br.buffer = AU.voice.breath; br.loop = true; brG = C.createGain(); brG.gain.value = 0; brG.gain.setTargetAtTime(0.9, C.currentTime, 0.4); br.connect(brG); brG.connect(AU.sfx); br.start(); } // 自己在被子裡喘氣
+    const room = DORM.rooms.find((r) => b.room === `二樓_${r.no}房`) || { zc: b.cz }, aisleZ = room.zc > b.cz ? b.z1 : b.z0, out = room.zc > b.cz ? 1 : -1; // 床靠房間中間的那一側
+    const hx = b.cx + (-Math.sin(b.lookYaw)) * 0.45, hz = aisleZ + out * 0.3; // 他躲在床邊、你頭前方一點的位置
+    enemy.x = hx; enemy.z = hz; enemy.y = b.floor - 1.6; enemy.moving = false; enemy.stun = 0; enemyMesh.visible = true; // 一開始整個人在床緣下面、看不到
+    const base = b.lookYaw, tw = (a, b2, k) => a + (b2 - a) * (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2), SC = window.__animScale || 1, wait = (ms) => sleep(ms * SC); // __animScale：測試截圖用（放慢動畫）
+    const anim = async (ms, f) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / (ms * SC)); f(k); if (k >= 1) break; await wait(16); } };
+    P.pitch = -0.22;
+    // 1) 喘氣、頭慢慢往左、往右探
+    await anim(1500, (k) => { P.yaw = tw(base, base + 0.55, k); P.pitch = tw(-0.22, -0.12, k); });
+    await anim(1900, (k) => { P.yaw = tw(base + 0.55, base - 0.6, k); });
+    await anim(1300, (k) => { P.yaw = tw(base - 0.6, base, k); P.pitch = tw(-0.12, -0.3, k); });
+    // 2) 轉頭往床邊（房間那一側）低頭看
+    const toward = Math.atan2(-(hx - b.cx), -(hz - b.cz)); let dd = toward - base; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI;
+    await anim(1400, (k) => { P.yaw = base + dd * 0.85 * (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2); P.pitch = tw(-0.3, -0.42, k); });
+    if (brG) brG.gain.setTargetAtTime(0.35, C.currentTime, 0.3); // 屏住呼吸
+    await wait(700);
+    // 3) 他的頭從床緣下面慢慢探上來（只露出頭）
+    try { SFX.doorCreak(hx, b.top, hz); } catch (e) { }
+    const yA = b.floor - 1.6, yB = b.top + 0.42 - 1.9 + 0.12;
+    await anim(2600, (k) => { enemy.y = yA + (yB - yA) * (1 - Math.pow(1 - k, 2.2)); P.yaw = base + dd * (0.85 + 0.15 * k); });
+    // 4) 盯著你一下
+    G.shake = 0.25; await wait(1100);
+    if (br) { try { br.stop(); } catch (e) { } }
+    // 5) 驚嚇＋死亡畫面
+    G.hbForce = false; SFX.scare(); ui.scare.hidden = false; ui.scare.classList.remove('go'); void ui.scare.offsetWidth; ui.scare.classList.add('go');
+    mixTo(AU.horror, 0, 0.8); mixTo(AU.chase, 0, 0.5); mixTo(AU.hb, 0, 0.3);
+    await sleep(1500);
+    ui.scare.hidden = true; ui.hud.hidden = true; P.hidden = false;
+    ui.deadLine.textContent = '他一直都在床底下。';
     ui.dead.hidden = false; $('btnRetry').focus({ preventScroll: true });
   }
   async function escape() {
@@ -1296,7 +1345,7 @@
       P.running = !!(want && P.stamina > 0 && !P.exhausted && !ZHU.slow && !P.crouch && !G.broken); // 看到竹竿時被迫用走的
       if (P.running) P.stamina = Math.max(0, P.stamina - 15 * dt); else P.stamina = Math.min(100, P.stamina + 10 * dt);
       const sp = (P.running ? 5.0 : 1.55) * // 走路放慢（探索時壓抑的步調），跑步不變（捲毛追逐的平衡）
-         ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1) * (1 - 0.48 * P.cr) * (G.broken ? 0.6 : 1); // 骨折：一拐一拐、只剩六成速度
+         ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1) * (1 - 0.48 * P.cr) * (G.broken ? (Math.sin(G.walk.phase) < 0 ? 1.05 : 0.4) : 1); // 骨折：好的那隻腳踩出去時往前挪，拖受傷那隻腳時幾乎不動（平均約六成速度）
       if (moving) {
         const l = Math.hypot(mx, mz); mx /= l; mz /= l;
         const s = Math.sin(P.yaw), c = Math.cos(P.yaw);
@@ -1304,9 +1353,9 @@
         const n = Math.ceil(Math.hypot(wx, wz) / 0.08); G.px0 = P.x; G.pz0 = P.z;
         for (let i = 0; i < n; i++) world.move(P, wx / n, wz / n);
         if (P.grounded) { // 每一步 = 相位走過 π；腳步聲對齊頭部下沉的瞬間
-          const moved = Math.hypot(P.x - G.px0, P.z - G.pz0); const stepLen = P.running ? 1.6 : 1.08 - 0.3 * P.cr; // 走路約每秒 1.4 步（慢而沉）；跑步約每秒 3 步
+          const moved = Math.hypot(P.x - G.px0, P.z - G.pz0); const stepLen = P.running ? 1.6 : G.broken ? 0.75 : 1.08 - 0.3 * P.cr; // 走路約每秒 1.4 步（慢而沉）；跑步約每秒 3 步
           const before = Math.floor((G.walk.phase - Math.PI / 2) / Math.PI); G.walk.phase += moved / stepLen * Math.PI;
-          if (Math.floor((G.walk.phase - Math.PI / 2) / Math.PI) !== before) { G.walk.kick = 1; G.walk.foot = -(G.walk.foot || 1); SFX.step(P.running, Math.abs(P.y - G.lastY) > 0.05, P.y > 3 && (P.z < DORM.bathZ || (Math.abs(P.x - DORM.XS) > 2.2 && P.x - DORM.XS > -9.6 && P.z < -0.8)), false, G.walk.foot, G.walk.amp); G.lastY = P.y; }
+          if (Math.floor((G.walk.phase - Math.PI / 2) / Math.PI) !== before) { G.walk.kick = 1; G.walk.foot = Math.sin(G.walk.phase) > 0 ? 1 : -1; /* 左右腳跟相位對齊（骨折時 foot > 0 是受傷那隻） */ SFX.step(P.running, Math.abs(P.y - G.lastY) > 0.05, P.y > 3 && (P.z < DORM.bathZ || (Math.abs(P.x - DORM.XS) > 2.2 && P.x - DORM.XS > -9.6 && P.z < -0.8)), false, G.walk.foot, G.walk.amp); G.lastY = P.y; }
         }
       }
       if (keys.Space && P.grounded && !dlgState) { P.vy = 4.3; P.grounded = false; }
@@ -1379,7 +1428,7 @@
       G.chaseMix = chasing ? 1 : Math.max(0, G.chaseMix - dt * 0.4);
       mixTo(AU.chase, G.phase === 'chase' ? G.chaseMix * 0.32 : 0, chasing ? 0.3 : 1.2);
       if (AU.bgmSrc) mixTo(AU.bgmG, (0.48 + G.chaseMix * 0.32) * (P.hidden && G.enemyDist < 8 ? 0.55 : 1), 0.9);
-      mixTo(AU.hb, G.phase === 'chase' ? clamp(1.2 - G.enemyDist / 14, 0, 0.9) : 0, 0.5);
+      mixTo(AU.hb, G.hbForce ? 1 : G.phase === 'chase' ? clamp(1.2 - G.enemyDist / 14, 0, 0.9) : 0, 0.5); // 自己的心跳：捲毛越近越大聲、越快；床上被抓的動畫裡一直很大聲
       const l = AU.ctx.listener; const cp = camera.position; const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
       if (l.positionX) { l.positionX.value = cp.x; l.positionY.value = cp.y; l.positionZ.value = cp.z; l.forwardX.value = fx; l.forwardY.value = 0; l.forwardZ.value = fz; l.upX.value = 0; l.upY.value = 1; l.upZ.value = 0; } else { l.setPosition(cp.x, cp.y, cp.z); l.setOrientation(fx, 0, fz, 0, 1, 0); }
     }
@@ -1414,12 +1463,12 @@
       const r = Wk.run, A = Wk.amp, ph = Wk.phase;
       const s2 = Math.sin(ph) * Math.sin(ph) * (1 - 0.45 * (P.cr || 0));
       Wk.kick = Math.max(0, (Wk.kick || 0) - dt * (6 + 4 * r));              // 腳落地的瞬間頭會頓一下（跟腳步聲同時）
-      const kk = Wk.kick * Wk.kick;
+      const kk = Wk.kick * Wk.kick * (G.broken && Math.sin(ph) > 0 ? 0.2 : 1);
       let up = -(r > 0.5 ? Math.pow(s2, 1.6) : s2) * (0.045 + 0.03 * r) * A;   // 每一步下沉：走路是大而慢的起伏，跑步落地更頓
       up -= kk * (0.007 + 0.014 * r) * A;
-      if (G.broken) { up -= Math.max(0, Math.sin(ph)) * 0.05 * A; roll += 0; } // 一拐一拐：踩到受傷那隻腳時身體往下沉
+      if (G.broken) { up += Math.max(0, Math.sin(ph)) * 0.035 * A - Math.max(0, -Math.sin(ph)) * 0.06 * A; } // 單腳往前挪：好腳踩下去時整個人重重往下沉，拖受傷的腳時身體撐高
       side = Math.sin(ph) * (0.03 + 0.012 * r) * A;                         // 左右重心轉移（走路時身體會明顯左右換腳）
-      roll = Math.sin(ph) * (0.008 + 0.008 * r) * A + (G.broken ? Math.max(0, Math.sin(ph)) * 0.035 * A : 0); // 身體側傾（骨折時往受傷那側歪）
+      roll = Math.sin(ph) * (0.008 + 0.008 * r) * A + (G.broken ? 0.03 * A + Math.max(0, -Math.sin(ph)) * 0.03 * A : 0); // 身體側傾（骨折時往受傷那側歪）
       tilt = Math.sin(2 * ph) * 0.0025 * (1 - r) * A + Math.cos(2 * ph) * 0.006 * r * A + kk * (0.003 + 0.006 * r) * A; // 走路微微點頭、跑步點頭、落地往下頓
       const heave = Math.sin(t * (1.4 + G.exert * 2.6)) * (0.004 + G.exert * 0.016); // 呼吸起伏，喘越大越明顯
       Wk.land = Math.max(0, Wk.land - dt * 3.2);
@@ -1479,5 +1528,5 @@
 
   // 測試用
   enemy.altVia = DORM.altVia; // 晒衣場室外樓梯頂端的平台（二樓浴廁旁）
-  window.__game = { FD, ZHU, camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
+  window.__game = { caught, FD, ZHU, camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
 })();

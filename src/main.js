@@ -1078,7 +1078,7 @@
     Object.assign(G, { phase: 'intro', paused: false, enemyDist: 99, chaseMix: 0, enemySpeedMul: 1, items: [], cur: -1, hold: 0, holding: false, questT: 0, hintShown: false, sips: 0, hits: 0, startTime: performance.now(), bed: null, target: null, shake: 0 });
     enemy.reset(); enemyMesh.visible = false; npcMesh.visible = true; npcMesh.position.set(npcPos.x, 0, npcPos.z); npcBox.on = true; doorBox.on = true;
     eSpot.intensity = 0; eGlow.intensity = 0; eSpot.color.setHex(0xff1410); stunMesh.visible = false;
-    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; G.hbForce = false; G.bedScene = false; if (enemyMesh) enemyMesh.material.emissive.setHex(ENEMY_EMI); if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
+    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; G.hbForce = false; G.bedScene = false; G.peekTilt = 0; if (enemyMesh) enemyMesh.material.emissive.setHex(ENEMY_EMI); if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
     spawnItems(); renderSlots(); tvReset();
     for (const d of DOORS) { d.open = false; d.ang = 0; d.piv.rotation.y = d.base; d.box.on = true; }
     MAIN.open = false; MAIN.ang = 0; for (const l of MAIN.leaves) l.piv.rotation.y = 0;
@@ -1097,6 +1097,7 @@
     if (G.phase !== 'chase') return; G.phase = 'dead'; unlockPointer(); keys.KeyW = keys.KeyA = keys.KeyS = keys.KeyD = false;
     const fromBed = kind === 'bed'; const spotKind = G.bed ? G.bed.kind : 'bed';
     if (fromBed && spotKind === 'bed' && G.bed) { await bedCatchScene(G.bed); return; }
+    if (fromBed && G.bed && G.bed.door) { await stallCatchScene(G.bed); return; }
     if (G.bed && G.bed.doorMesh) G.bed.doorMesh.visible = false;
     if (fromBed) { ui.hideFx.classList.add('torn'); G.shake = 1.6; await sleep(420); ui.hideFx.hidden = true; ui.hideFx.classList.remove('torn'); P.hidden = false; }
     try { SFX.riser(); } catch (e) { }
@@ -1144,6 +1145,44 @@
     await sleep(1500);
     ui.scare.hidden = true; ui.hud.hidden = true; P.hidden = false;
     ui.deadLine.textContent = '他一直都在床底下。';
+    ui.dead.hidden = false; $('btnRetry').focus({ preventScroll: true });
+  }
+  // 躲在浴室／廁所隔間被抓：狹窄的隔間裡喘氣（畫面只跟著呼吸微微起伏）→ 門被慢慢推開、門外沒有人 → 他的頭從門邊慢慢探出來 → 對視 → 死亡
+  async function stallCatchScene(sp) {
+    const C = AU.ctx; let br = null, brG = null; G.hbForce = true; G.bedScene = true; enemy.active = false;
+    try { chaseVoiceStop(); bgmStop(0.6); mixTo(AU.chase, 0, 0.6); mixTo(AU.horror, 0.3, 1.5); } catch (e) { }
+    eSpot.intensity = 0; eGlow.intensity = 0; enemyMesh.material.emissive.setHex(0x000000); enemyMesh.visible = false;
+    ui.hideFx.hidden = true; if (ui.prompt) ui.prompt.hidden = true;
+    if (C && AU.voice && AU.voice.breath) { br = C.createBufferSource(); br.buffer = AU.voice.breath; br.loop = true; brG = C.createGain(); brG.gain.value = 0; brG.gain.setTargetAtTime(1.0, C.currentTime, 0.3); br.connect(brG); brG.connect(AU.sfx); br.start(); }
+    const SC = window.__animScale || 1, wait = (ms) => sleep(ms * SC), ease = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+    const anim = async (ms, f) => { const t0 = performance.now(); for (;;) { const k = Math.min(1, (performance.now() - t0) / (ms * SC)); f(k); if (k >= 1) break; await wait(16); } };
+    const d = sp.door, fx = (d.x0 + d.x1) / 2, o = Math.sign(fx - sp.cx) || 1, base = sp.lookYaw, t0 = performance.now();
+    const breathe = () => { const t = (performance.now() - t0) / 1000; P.pitch = -0.04 + Math.sin(t * 2.3) * 0.018; P.yaw = base + Math.sin(t * 1.15) * 0.012; }; // 只有呼吸的微幅起伏
+    // 門：用一片可以轉的門板取代原本關著的門
+    if (sp.doorMesh) sp.doorMesh.visible = false;
+    const piv = new THREE.Group(); piv.position.set(fx, d.y0, d.z1); scene.add(piv);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.04, d.y1 - d.y0, d.z1 - d.z0), new THREE.MeshPhongMaterial({ color: d.c, shininess: 10 })); leaf.position.set(0, (d.y1 - d.y0) / 2, -(d.z1 - d.z0) / 2); piv.add(leaf);
+    // 1) 喘氣
+    await anim(3200, breathe);
+    // 2) 門被慢慢推開（往外），門外沒有人
+    try { SFX.doorCreak(fx, d.y0 + 1.0, (d.z0 + d.z1) / 2); } catch (e) { }
+    await anim(2600, (k) => { breathe(); piv.rotation.y = -o * 1.75 * ease(k); });
+    if (brG) brG.gain.setTargetAtTime(0.3, C.currentTime, 0.25); // 屏住呼吸
+    await anim(1500, breathe);
+    // 3) 他的頭從門框另一邊（前板後面）慢慢探出來
+    const ex = fx + o * 0.32, zA = d.z0 - 0.8, zB = d.z0 - 0.3, floorY = d.y0 - 0.1 - (sp.kind === 'stall' ? 0.2 : 0);
+    enemy.x = ex; enemy.z = zA; enemy.y = floorY - 0.15; enemy.moving = false; enemy.stun = 0; enemyMesh.visible = true;
+    const toward = Math.atan2(-(ex - sp.cx), -(zB - sp.cz)); let dd = toward - base; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI;
+    await anim(2400, (k) => { const e2 = ease(k); enemy.z = zA + (zB - zA) * e2; G.peekTilt = Math.sign(Math.sin(P.yaw)) * 0.3 * e2; /* 身體留在前板後面，只有上半身歪出來、頭從門框邊探出 */ breathe(); P.yaw = base + dd * 0.7 * e2; P.pitch = -0.02 + 0.12 * e2; });
+    // 4) 對視
+    G.shake = 0.2; await wait(1100);
+    if (br) { try { br.stop(); } catch (e) { } }
+    // 5) 驚嚇＋死亡畫面
+    G.hbForce = false; G.peekTilt = 0; SFX.scare(); ui.scare.hidden = false; ui.scare.classList.remove('go'); void ui.scare.offsetWidth; ui.scare.classList.add('go');
+    mixTo(AU.horror, 0, 0.8); mixTo(AU.chase, 0, 0.5); mixTo(AU.hb, 0, 0.3);
+    await sleep(1500);
+    scene.remove(piv); ui.scare.hidden = true; ui.hud.hidden = true; P.hidden = false;
+    ui.deadLine.textContent = sp.kind === 'stall' ? '他一直站在隔間門外。' : '他一直站在浴簾外面。';
     ui.dead.hidden = false; $('btnRetry').focus({ preventScroll: true });
   }
   async function escape() {
@@ -1407,7 +1446,7 @@
         else if (ev === 'picked') { if (G.lureDrop) { removeDrop(G.lureDrop); toast('他撿走了冷氣卡……', 2200); } G.lureDrop = null; }
       }
       if (enemy.active && !AU.cv) chaseVoiceStart();
-      const bedHunt = enemy.state === 'hunt' && P.hidden && G.bed && G.bed.kind === 'bed'; // 發現你躲在床上：不吼、不追逐音樂，悄悄走到床邊
+      const bedHunt = enemy.state === 'hunt' && P.hidden && G.bed; // 發現你躲在床上：不吼、不追逐音樂，悄悄走到床邊
       chaseVoiceUpdate(enemy.active && enemy.stun <= 0 && (enemy.state === 'chase' || (enemy.state === 'hunt' && !bedHunt)) && !G.paused);
       if (enemy.active && enemy.moving && enemy.stun <= 0) { enemy._st = (enemy._st || 0) + dt * enemy.speed; if (enemy._st > 1.25) { enemy._st = 0; SFX.enemyStep(enemy.x, enemy.y, enemy.z, enemy.state === 'chase'); } }
       if (G.phase === 'chase' && P.z > DOOR.z + 0.7 && P.y < 1.2 && Math.abs(P.x - DOOR.x) < 3.5 && !P.hidden) escape();
@@ -1417,7 +1456,7 @@
     if (enemyMesh && enemyMesh.visible) {
       const st = enemy.stun > 0; const bob = enemy.moving ? Math.abs(Math.sin(performance.now() / (enemy.state === 'chase' ? 90 : 160))) * 0.06 : 0;
       enemyMesh.position.set(enemy.x + (st ? Math.sin(performance.now() / 70) * 0.04 : 0), enemy.y + bob, enemy.z);
-      enemyMesh.rotation.z = st ? Math.sin(performance.now() / 130) * 0.22 : 0;
+      enemyMesh.rotation.z = st ? Math.sin(performance.now() / 130) * 0.22 : (G.peekTilt || 0);
       if (ERUN.frames) { // 追著跑的時候換成跑步動圖，其他時候（站著、走路搜尋、暈眩）是原本那張
         const run = !st && enemy.moving && (enemy.state === 'chase' || enemy.state === 'hunt') && !G.bedScene;
         const f = run ? Math.floor(performance.now() / 85) % 5 : -1;
@@ -1434,7 +1473,7 @@
     } else G.enemyDist = 99;
     // 音樂混音
     if (AU.ctx) {
-      const chasing = G.phase === 'chase' && (enemy.state === 'chase' || (enemy.state === 'hunt' && !(P.hidden && G.bed && G.bed.kind === 'bed'))) && enemy.stun <= 0;
+      const chasing = G.phase === 'chase' && (enemy.state === 'chase' || (enemy.state === 'hunt' && !(P.hidden && G.bed))) && enemy.stun <= 0;
       G.chaseMix = chasing ? 1 : Math.max(0, G.chaseMix - dt * 0.4);
       mixTo(AU.chase, G.phase === 'chase' ? G.chaseMix * 0.32 : 0, chasing ? 0.3 : 1.2);
       if (AU.bgmSrc) mixTo(AU.bgmG, (0.48 + G.chaseMix * 0.32) * (P.hidden && G.enemyDist < 8 ? 0.55 : 1), 0.9);

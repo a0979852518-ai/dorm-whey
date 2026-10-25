@@ -2743,9 +2743,10 @@ function buildProps(DORM, scene) {
       if (!playable() || P.hidden) return;
       const ax0 = Math.min(d.x, d.oppX) - 0.35, ax1 = Math.max(d.x, d.oppX) + 0.35; if (P.x > ax0 && P.x < ax1 && P.z > d.z0 - 0.4 && P.z < d.z1 + 0.4) return; // 玩家在門倒下的範圍裡就不倒
       const dx = d.x - P.x, dz = cz - P.z, dist = Math.hypot(dx, dz);
-      if (dist < 2.0 || dist > 7.5) return;
-      const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw); if ((fx * dx + fz * dz) / dist < 0.8) return; // 要正在看著它
-      if (!world.los(P.x, P.y + eyeH(), P.z, d.x + d.out * 0.1, d.y0 + 1.0, cz)) return;
+      if (dist > 9) return;
+      const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), dot = (fx * dx + fz * dz) / Math.max(dist, 0.01);
+      if (!(dot > 0.35 || (dist < 5.5 && dot > -0.5))) return; // 在畫面裡就算（不用正對著）；走近到 5.5 m 內、只要沒有背對它，看得到它的位置就倒（經過通道口時就會倒）
+      const ey = P.y + eyeH(); if (!world.los(P.x, ey, P.z, d.x + d.out * 0.1, d.y0 + 1.0, cz) && !world.los(P.x, ey, P.z, d.x + d.out * 0.1, d.y0 + 1.7, cz)) return;
       FD.st = 'fall'; FD.t = 0; FD.box.on = false; FD.block.on = true; try { FD.rec = SFX.doorCrashRec(d.x + d.out * 0.8, d.y0 + 1.0, cz, 0.42); } catch (e) { FD.rec = false; } return;
     }
     FD.t += dt; const t = FD.t;

@@ -1144,13 +1144,13 @@
     else if (t.kind === 'drop') { const dr = t.drop; removeDrop(dr); SFX.pickup(); addItem(dr.type); if (dr.type === 'card' && (enemy.state === 'lure' || enemy.state === 'pickup')) { enemy.state = 'search'; enemy.wait = 0.5; } }
   }
   function hide(bed) {
-    const seen = enemy.active && enemy.stun <= 0 && (enemy.sees || enemy.canSee(P));
+    const seen = enemy.active && enemy.stun <= 0 && enemy.canSee(P); // 只看「躲進去的這一刻」他是不是真的看得到你（不用 0.12 秒前的舊結果）
     G.bed = bed; G.prevPos = { x: P.x, y: P.y, z: P.z, yaw: P.yaw }; P.hidden = true; P.running = false;
     P.yaw = bed.lookYaw; P.pitch = bed.kind === 'bed' ? -0.22 : -0.08; ui.hideFx.hidden = false;
     ui.hideFx.dataset.t = bed.kind === 'bed' ? '躲在被子裡　屏住呼吸' : bed.kind === 'stall' ? '縮在隔間裡　門縫外一片漆黑' : '躲在浴簾後　別發出聲音';
     ui.hideFx.classList.toggle('stall', bed.kind !== 'bed');
     if (bed.doorMesh) { bed.doorMesh.visible = true; SFX.click(false); }
-    if (seen) enemy.huntBed(bed);
+    if (seen) { enemy.huntBed(bed); G.alertCD = 0; alertToast('他看到你躲進去了！'); }
   }
   function unhide() { if (!P.hidden) return; P.hidden = false; ui.hideFx.hidden = true; if (G.bed && G.bed.doorMesh) G.bed.doorMesh.visible = false; const p = G.prevPos; P.x = p.x; P.y = p.y; P.z = p.z; G.bed = null; }
 

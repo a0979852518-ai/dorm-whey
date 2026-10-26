@@ -740,7 +740,8 @@ class Enemy {
     this.path = null;
     // 上下樓換路線：不是在追人時，約 45% 的機率改走晒衣場的室外樓梯（從二樓浴廁那邊上下），其他時候走一般的主樓梯
     const V = this.altVia, crossFloor = Math.abs(y - this.y) > 1.5;
-    if (V && crossFloor && !this.rush && this.state !== 'chase' && this.state !== 'hunt' && Math.random() < 0.45) {
+    const pAlt = this.rushVia === 'yard' ? 1 : this.rushVia === 'main' ? 0 : (!this.rush && this.state !== 'chase' && this.state !== 'hunt' ? 0.45 : 0);
+    if (V && crossFloor && Math.random() < pAlt) {
       const v = this.nav.nearest(V.x, V.z, V.y, 2.2); const p1 = v != null ? this.nav.path(a, v) : null, p2 = p1 ? this.nav.path(v, b) : null;
       if (p1 && p2) { this.path = p1.concat(p2.slice(1)); this.viaYard = true; }
     }
@@ -768,7 +769,7 @@ class Enemy {
   lure(x, y, z) { this.state = 'lure'; this.rush = false; this.hideBed = null; this.lurePos = { x, y, z }; this.wait = 0; this.goTo(x, y, z); }
   // 聽到寢室裡有聲音：照順序一間一間走到門口 → 開門走進去看一下 → 下一間
   searchRooms(list) { if (!this.active || this.state === 'chase' || this.state === 'hunt') return; this.state = 'roomsearch'; this.rq = list.slice(0, 4); this.rqi = 0; this.rqPhase = 'go'; this.wait = 0; this.rush = false; this.target = null; const r = this.rq[0]; if (r) this.goTo(r.out.x, r.out.y, r.out.z); }
-  rushTo(x, y, z) { this.state = 'investigate'; this.rush = true; this.target = null; this.wait = 0; this.goTo(x, y, z); } // 喝下乳清：直接衝上樓
+  rushTo(x, y, z) { this.state = 'investigate'; this.rush = true; this.target = null; this.wait = 0; this.rushVia = Math.random() < 0.5 ? 'yard' : 'main'; this.goTo(x, y, z); this.rushVia = null; } // 喝下乳清：直接衝上樓（一半機率從晒衣場的室外樓梯、浴廁那邊上去）
   walkTo(x, y, z) { this.state = 'search'; this.target = null; this.wait = 0; this.goTo(x, y, z); }
   follow(dt, speed) {
     if (!this.path || this.pi >= this.path.length) { this.moving = false; return true; }

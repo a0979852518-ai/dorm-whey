@@ -309,7 +309,7 @@
     TV.light = new THREE.SpotLight(0x9fb4d8, 0, 10, 1.15, 1, 2); TV.light.position.set(t.x + t.nx * 0.15, t.y, t.z + t.nz * 0.15); TV.light.target.position.set(t.x + t.nx * 7, 3.6, t.z + t.nz * 7); scene.add(TV.light); scene.add(TV.light.target);
   }
   const ready = Promise.all([loadTex(A.p1), loadTex(A.p2), loadTex(A.whey), loadTex(A.pot), loadTex(A.tv1), loadTex(A.tv2), loadTex(A.tv3), loadTex(A.tv4), loadTex(A.remote), loadTex(A.hou), loadTex(A.bags2), loadTex(A.bag1), loadTex(A.card)]).then(([t1, t2, tw, tp, v1, v2, v3, v4, rm, th, tb2, tb1, tc]) => {
-    TV.tex = [v1, v2, v3, v4]; TEX.whey = tw; TEX.pot = tp; TEX.remote = rm; TEX.card = tc;
+    TV.tex = [v1, v2, v3, v4]; TEX.whey = tw; TEX.pot = tp; TEX.remote = rm; TEX.card = tc; loadTex(A.key).then((t) => { TEX.key = t; });
     // 208 號房：受傷的侯宸宇（躺在靠窗左側地上）、乳清旁的垃圾袋
     houMesh = billboard(th, 0.56, 0x050505, 0x8a8a8a); houMesh.position.set(HOU.x, HOU.y, HOU.z);
     for (const [ti, x, z, h] of DORM.bags) { const tx = ti ? tb1 : tb2; const m = billboard(tx, h, 0x050505); m.position.set(x, DORM.F + 0.01, z); BAGS.push(m); world.dyn.push({ n: 'bag', x0: x - 0.22, x1: x + 0.22, z0: z - 0.22, z1: z + 0.22, y0: 3.35, y1: 3.35 + h * 0.85 }); }
@@ -441,6 +441,15 @@
       // 吃痛的悶哼（低沉的喉音）
       const C = AU.ctx, o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(150, t + 0.25); o.frequency.linearRampToValueAtTime(105, t + 0.9);
       const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; const g = C.createGain(); env(g, t + 0.25, 0.06, 0.12, 0.6); o.connect(f); f.connect(g); g.connect(d); o.start(t + 0.25); o.stop(t + 1.0);
+    },
+    keyDrop(x, y, z) { // 鑰匙掉在地上：小小聲的叮噹兩下
+      if (!AU.ctx) return; const t = AU.ctx.currentTime, d = out(AU.sfx, x, y + 0.05, z, 0.35);
+      for (const [dt, g] of [[0, 0.18], [0.11, 0.1], [0.19, 0.05]]) for (const f of [3100, 4700, 6900]) tone(d, t + dt, 'sine', f * rand(0.97, 1.03), f * 0.99, g * (f === 3100 ? 1 : 0.5), 0.001, 0.12);
+      noiseHit(d, t, 'highpass', 4000, 0.8, 0.05, 0.001, 0.02);
+    },
+    keyUnlock() { // 插鑰匙、轉開鎖
+      if (!AU.ctx) return; const t = AU.ctx.currentTime, d = out(AU.sfx, DORM.DOOR.x, 1, DORM.DOOR.z, 0.3);
+      noiseHit(d, t, 'bandpass', 2600, 3, 0.25, 0.002, 0.04); noiseHit(d, t + 0.18, 'bandpass', 1500, 4, 0.4, 0.002, 0.06); tone(d, t + 0.18, 'square', 700, 500, 0.05, 0.002, 0.05); noiseHit(d, t + 0.32, 'bandpass', 900, 3, 0.35, 0.003, 0.08);
     },
     zhuStep(x, y, z) { // 竹竿穿拖鞋跑步：啪噠啪噠
       if (!AU.ctx) return; const t = AU.ctx.currentTime, d = out(AU.sfx, x, y + 0.1, z, 0.35);
@@ -692,7 +701,7 @@
   let toastT = 0; function toast(t, ms = 2600) { ui.toast.textContent = t; ui.toast.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => ui.toast.classList.remove('show'), ms); }
   function renderSlots() {
     ui.slots.innerHTML = '';
-    const IMG = { whey: A.whey, pot: A.pot, remote: A.remote, card: A.card, cig: A.cig }, NAME = { whey: ITEM_NAME('whey'), pot: '快煮鍋', remote: '遙控器', card: '冷氣卡', cig: '香菸' };
+    const IMG = { whey: A.whey, pot: A.pot, remote: A.remote, card: A.card, cig: A.cig, key: A.key }, NAME = { whey: ITEM_NAME('whey'), pot: '快煮鍋', remote: '遙控器', card: '冷氣卡', cig: '香菸', key: '大門鑰匙' };
     G.items.forEach((it, i) => { const d = document.createElement('div'); d.className = 'slot' + (i === G.cur ? ' cur' : ''); d.innerHTML = `<img alt="" src="${IMG[it]}"><span class="slot-key">${i + 1}</span><span class="slot-name">${NAME[it]}</span>`; ui.slots.appendChild(d); });
     const it = G.items[G.cur];
     ui.hand.hidden = !it; if (it) { ui.handImg.src = { whey: A.whey, pot: A.pot, remote: A.remote, card: A.card, cig: A.cig }[it]; ui.hand.dataset.item = it; }
@@ -1040,13 +1049,24 @@
     ui.fade.className = 'fade';
     mixTo(AU.amb, 1, 1.5); mixTo(AU.horror, 0.07, 0.6);
     setTimeout(() => { if (G.phase === 'chase') { bgmStart(); mixTo(AU.bgmG, 0.5, 1.6); } }, 3800);
-        doorBox.on = false; MAIN.open = true;
+        // 大門被他鎖上了：要撿到他追你時掉下的鑰匙才出得去（unlockMain）
     G.phase = 'chase'; G.paused = !locked() && !G.noLock; ui.pause.hidden = !G.paused;
     setObjective('逃出宿舍！回到一樓大門');
     await sleep(2400);
     if (G.phase !== 'chase') return;
     enemy.activate(npcPos.x, 0, npcPos.z); enemy.rushTo(G.drinkAt.x, G.drinkAt.y, G.drinkAt.z);
     toast('他衝上樓了！', 2600);
+    G.keyT = rand(7, 22); // 他追上樓的途中會隨機掉下大門鑰匙
+  }
+  function lockedMain() { if (G.keyHint) return; G.keyHint = true; G.alertCD = 0; alertToast('大門被他鎖上了！鑰匙在他身上……'); setObjective(G.keyDropped ? '找到他掉下的鑰匙，打開大門' : '大門被鎖上了！找到他身上的鑰匙'); }
+  function unlockMain() { removeItem('key'); doorBox.on = false; MAIN.open = true; try { SFX.keyUnlock(); } catch (e) { } toast('用鑰匙打開大門了！快跑！', 2200); setObjective('跑出大門！'); }
+  function keyStep(dt) { // 追逐中倒數，時間到、他在走路時，鑰匙從他身上掉下來（小小的叮噹聲，玩家要自己注意到）
+    if (G.phase !== 'chase' || G.keyDropped || !enemy.active || G.paused || dlgState || !(G.keyT > 0)) return;
+    G.keyT -= dt; if (G.keyT > 0 || !enemy.moving || enemy.stun > 0 || !TEX.key) return;
+    G.keyDropped = true; const fy = world.ground(enemy.x, enemy.z, enemy.y + 0.5); const y = fy === null || fy === undefined ? enemy.y : fy;
+    const dr = { type: 'key', x: enemy.x, y, z: enemy.z, fly: null, mesh: makeDropMesh('key', true) }; dr.mesh.position.set(dr.x, y + 0.016, dr.z); dr.mesh.rotation.z = rand(0, 6.28); DROPS.push(dr);
+    try { SFX.keyDrop(enemy.x, y, enemy.z); } catch (e) { }
+    if (G.keyHint) setObjective('找到他掉下的鑰匙，打開大門');
   }
   let roarT = 0; function showRoar(t) { ui.roar.textContent = t; ui.roar.classList.remove('show'); void ui.roar.offsetWidth; ui.roar.classList.add('show'); clearTimeout(roarT); roarT = setTimeout(() => ui.roar.classList.remove('show'), 4600); }
 
@@ -1079,7 +1099,7 @@
     Object.assign(G, { phase: 'intro', paused: false, enemyDist: 99, chaseMix: 0, enemySpeedMul: 1, items: [], cur: -1, hold: 0, holding: false, questT: 0, hintShown: false, sips: 0, hits: 0, startTime: performance.now(), bed: null, target: null, shake: 0 });
     enemy.reset(); enemyMesh.visible = false; npcMesh.visible = true; npcMesh.position.set(npcPos.x, 0, npcPos.z); npcBox.on = true; doorBox.on = true;
     eSpot.intensity = 0; eGlow.intensity = 0; eSpot.color.setHex(0xff1410); stunMesh.visible = false;
-    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; G.hbForce = false; G.bedScene = false; G.peekTilt = 0; if (enemyMesh) enemyMesh.material.emissive.setHex(ENEMY_EMI); if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
+    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; G.hbForce = false; G.bedScene = false; G.peekTilt = 0; G.keyT = 0; G.keyDropped = false; G.keyHint = false; if (enemyMesh) enemyMesh.material.emissive.setHex(ENEMY_EMI); if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
     spawnItems(); renderSlots(); tvReset();
     for (const d of DOORS) { d.open = false; d.ang = 0; d.piv.rotation.y = d.base; d.box.on = true; }
     MAIN.open = false; MAIN.ang = 0; for (const l of MAIN.leaves) l.piv.rotation.y = 0;
@@ -1222,6 +1242,7 @@
     }
     if (playable()) { let best = null, bd = 2.0; for (const d of DOORS) { if (Math.abs(P.y - d.y0) > 0.8) continue; const cx = d.cx, cz = d.cz, dd = Math.hypot(cx - P.x, cz - P.z); if (dd < bd && facing(cx, ey - 0.3, cz) > 0.35) { bd = dd; best = d; } } if (best) return { kind: 'roomdoor', door: best, text: best.open ? '按 F 關門' : '按 F 開門' }; }
     if (G.phase !== 'chase' && P.z > DOOR.z - 0.9 && Math.abs(P.x - DOOR.x) < 2.2 && P.y < 1) return { kind: 'door', text: '大門打不開……先幫他把乳清拿下來吧' };
+    if (G.phase === 'chase' && !MAIN.open && P.z > DOOR.z - 1.1 && Math.abs(P.x - DOOR.x) < 2.2 && P.y < 1) return { kind: 'door', text: G.items.includes('key') ? '按 F 用鑰匙打開大門' : '大門被鎖上了……' };
     return null;
   }
   function interact(t) {
@@ -1229,12 +1250,12 @@
     else if (t.kind === 'whey') takeWhey();
     else if (t.kind === 'pot') { pot.inWorld = false; potMesh.visible = false; SFX.pickup(); addItem('pot'); toast('拿到快煮鍋：長按 F 投擲，砸中他可以讓他暈 4 秒'); }
     else if (t.kind === 'bed') hide(t.bed);
-    else if (t.kind === 'door') SFX.locked();
+    else if (t.kind === 'door') { if (G.phase === 'chase' && G.items.includes('key')) unlockMain(); else { SFX.locked(); if (G.phase === 'chase') lockedMain(); } }
     else if (t.kind === 'roomdoor') { const opening = !t.door.open; setDoor(t.door, !t.door.open, true); if (opening && t.door.no === 222 && !G.panDone && panMesh) panScare(t.door); }
     else if (t.kind === 'remote') { TV.remoteInWorld = false; TV.remoteMesh.visible = false; SFX.pickup(); addItem('remote'); toast('拿到電視遙控器：對著電視按 F', 3000); }
     else if (t.kind === 'tv') tvPress();
     else if (t.kind === 'hou') talkHou();
-    else if (t.kind === 'drop') { const dr = t.drop; removeDrop(dr); SFX.pickup(); addItem(dr.type); if (dr.type === 'card' && (enemy.state === 'lure' || enemy.state === 'pickup')) { enemy.state = 'search'; enemy.wait = 0.5; } }
+    else if (t.kind === 'drop') { const dr = t.drop; removeDrop(dr); SFX.pickup(); addItem(dr.type); if (dr.type === 'key') { toast('撿到大門鑰匙了！回一樓大門！', 2600); setObjective('拿著鑰匙回一樓大門'); } if (dr.type === 'card' && (enemy.state === 'lure' || enemy.state === 'pickup')) { enemy.state = 'search'; enemy.wait = 0.5; } }
   }
   function hide(bed) {
     const seen = enemy.active && enemy.stun <= 0 && enemy.canSee(P); // 只看「躲進去的這一刻」他是不是真的看得到你（不用 0.12 秒前的舊結果）
@@ -1248,7 +1269,7 @@
   function unhide() { if (!P.hidden) return; P.hidden = false; ui.hideFx.hidden = true; if (G.bed && G.bed.doorMesh) G.bed.doorMesh.visible = false; const p = G.prevPos; P.x = p.x; P.y = p.y; P.z = p.z; G.bed = null; }
 
   // ---------- 道具使用（長按 F）----------
-  function canUseItem() { const it = G.items[G.cur]; if (it === 'remote' || it === 'card') return false; if (it === 'cig') return (G.cigs || 0) > 0 && !P.hidden && !dlgState && !G.target && (G.boostT || 0) <= 0; if (!it || G.phase !== 'chase' && !(it === 'pot' && G.phase === 'quest')) return false; if (it === 'whey' && (G.sips !== 1)) return false; return !P.hidden && !dlgState && !G.target; }
+  function canUseItem() { const it = G.items[G.cur]; if (it === 'remote' || it === 'card' || it === 'key') return false; if (it === 'cig') return (G.cigs || 0) > 0 && !P.hidden && !dlgState && !G.target && (G.boostT || 0) <= 0; if (!it || G.phase !== 'chase' && !(it === 'pot' && G.phase === 'quest')) return false; if (it === 'whey' && (G.sips !== 1)) return false; return !P.hidden && !dlgState && !G.target; }
   function useItem() {
     const it = G.items[G.cur];
     if (it === 'pot') {
@@ -1286,7 +1307,7 @@
   function land() { const f = pot.fly; pot.x = f.x; pot.y = Math.max(f.y, 0); pot.z = f.z; pot.fly = null; pot.inWorld = true; potMesh.position.set(pot.x, pot.y, pot.z); }
 
   // ---------- Q：把手上的道具丟出去（拋物線、會彈跳、落地後可以再撿） ----------
-  const ITEM_NAME = (t) => ({ whey: G.sips >= 2 ? '空罐' : '乳清', pot: '快煮鍋', remote: '遙控器', card: '冷氣卡' })[t] || t;
+  const ITEM_NAME = (t) => ({ whey: G.sips >= 2 ? '空罐' : '乳清', pot: '快煮鍋', remote: '遙控器', card: '冷氣卡', key: '大門鑰匙' })[t] || t;
   const DROPS = [];
   function flyPhys(f, h) { // 回傳 'land' 表示停下
     const px = f.x, py = f.y, pz = f.z; f.vy -= 9.8 * h; f.x += f.vx * h; f.y += f.vy * h; f.z += f.vz * h; f.spin = (f.spin || 0) + h * 8;
@@ -1301,8 +1322,8 @@
     return null;
   }
   function makeDropMesh(type, flat) {
-    const tex = TEX[type]; const h = { whey: 0.3, pot: 0.26, remote: 0.2, card: 0.1, cig: 0.12 }[type];
-    if (flat && (type === 'card' || type === 'remote')) { const w = type === 'card' ? 0.17 : 0.06, l = w * tex.image.height / tex.image.width; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a,  map: tex, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x161616, emissiveMap: tex })); m.rotation.x = -Math.PI / 2; m.rotation.z = rand(0, Math.PI * 2); scene.add(m); return m; }
+    const tex = TEX[type]; const h = { whey: 0.3, pot: 0.26, remote: 0.2, card: 0.1, cig: 0.12, key: 0.09 }[type];
+    if (flat && (type === 'card' || type === 'remote' || type === 'key')) { const w = type === 'card' ? 0.17 : type === 'key' ? 0.11 : 0.06, l = w * tex.image.height / tex.image.width; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), new THREE.MeshPhongMaterial(type === 'key' ? { shininess: 90, specular: 0x8a8a8a, map: tex, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x262626, emissiveMap: tex } : { shininess: 6, specular: 0x0a0a0a,  map: tex, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x161616, emissiveMap: tex })); m.rotation.x = -Math.PI / 2; m.rotation.z = rand(0, Math.PI * 2); scene.add(m); return m; }
     const m = billboard(tex, h, type === 'card' ? 0x222222 : 0x111111); m.userData.drop = true; return m;
   }
   function removeDrop(dr) { if (dr.mesh) scene.remove(dr.mesh); const i = DROPS.indexOf(dr); if (i >= 0) DROPS.splice(i, 1); if (G.lureDrop === dr) G.lureDrop = null; }
@@ -1324,7 +1345,7 @@
       dr.x = f.x; dr.y = f.y; dr.z = f.z;
       if (res === 'land') {
         dr.fly = null; dr.y = Math.max(dr.y, 0);
-        if (dr.type === 'card' || dr.type === 'remote') { scene.remove(dr.mesh); dr.mesh = makeDropMesh(dr.type, true); dr.mesh.position.set(dr.x, dr.y + 0.016, dr.z); }
+        if (dr.type === 'card' || dr.type === 'remote' || dr.type === 'key') { scene.remove(dr.mesh); dr.mesh = makeDropMesh(dr.type, true); dr.mesh.position.set(dr.x, dr.y + 0.016, dr.z); }
         else dr.mesh.position.set(dr.x, dr.y, dr.z);
         if (dr.type === 'card') toast(enemy.active ? '冷氣卡掉在地上……他會先去撿！' : '冷氣卡掉在地上', 2600);
       } else { dr.mesh.position.set(dr.x, dr.y - ({ whey: 0.15, pot: 0.13, remote: 0.1, card: 0.05 }[dr.type] || 0.1), dr.z); dr.mesh.rotation.z = Math.sin(f.spin) * 0.6; }
@@ -1374,7 +1395,7 @@
     toast('你從太高的地方跳下來，腳骨折了……（之後只能一拐一拐地走，不能跑）', 4200);
   }
   function update(dt) {
-    updateDoors(dt); updatePan(dt); updateZhu(dt); updateFallDoor(dt);
+    updateDoors(dt); updatePan(dt); updateZhu(dt); updateFallDoor(dt); keyStep(dt);
     if ((G.boostT || 0) > 0 && !G.paused && !dlgState) { G.boostT -= dt; if (G.boostT <= 0) toast('菸的效果退了', 1800); }
     const active = playable() && !G.paused && !dlgState;
     // 移動
@@ -1578,5 +1599,5 @@
 
   // 測試用
   enemy.altVia = DORM.altVia; // 晒衣場室外樓梯頂端的平台（二樓浴廁旁）
-  window.__game = { ERUN, em: () => enemyMesh, caught, FD, ZHU, camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
+  window.__game = { interact, ERUN, em: () => enemyMesh, caught, FD, ZHU, camera, SFX, audio: AU, MIC, heardNoise, lightCheck, scene, renderer, DOORS, setDoor, DORM, P, G, enemy, world, nav, L, whey, pot, newGame, tick: (n, dt) => { for (let i = 0; i < n; i++) { update(dt); place(dt); } }, setFlash, drink: drinkEvent, hide, unhide, useItem, addItem, AU: () => AU, TV, LNG, scene, renderer, flash, flood, eSpot, DROPS, HOU, dropCurrent, talkHou, findTarget: () => G.target, findTargetNow: () => findTarget(), showChoice, cam: () => camera.position, setPos: (x, y, z) => { P.x = x; P.y = y; P.z = z; } };
 })();

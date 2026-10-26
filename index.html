@@ -3036,6 +3036,18 @@ function buildProps(DORM, scene) {
   }
   function lockedMain() { if (G.keyHint) return; G.keyHint = true; G.alertCD = 0; alertToast('大門被他鎖上了！鑰匙在他身上……'); setObjective(G.keyDropped ? '找到他掉下的鑰匙，打開大門' : '大門被鎖上了！找到他身上的鑰匙'); }
   function unlockMain() { removeItem('key'); doorBox.on = false; MAIN.open = true; try { SFX.keyUnlock(); } catch (e) { } toast('用鑰匙打開大門了！快跑！', 2200); setObjective('跑出大門！'); }
+  // 鑰匙反光：手電筒照到地上的鑰匙時，金屬會一閃一閃地亮（加法混色的小光點）
+  const KEYGLINT = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,250,230,1)'); gr.addColorStop(0.15, 'rgba(255,240,200,0.8)'); gr.addColorStop(1, 'rgba(255,240,200,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    g.strokeStyle = 'rgba(255,250,235,0.9)'; g.lineWidth = 2; g.beginPath(); g.moveTo(32, 2); g.lineTo(32, 62); g.moveTo(2, 32); g.lineTo(62, 32); g.stroke();
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 })); sp.scale.set(0.22, 0.22, 1); sp.visible = false; scene.add(sp); return sp; })();
+  function keyGlint() {
+    const k = DROPS.find((d) => d.type === 'key' && !d.fly); if (!k || !P.light || G.flick > 0) { KEYGLINT.visible = false; return; }
+    const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z, dx = k.x - cx, dy = k.y + 0.02 - cy, dz = k.z - cz, d = Math.hypot(dx, dy, dz);
+    const inBeam = (dx * flashDir.x + dy * flashDir.y + dz * flashDir.z) / d; if (d > 12 || inBeam < 0.94 || !world.los(cx, cy, cz, k.x, k.y + 0.05, k.z)) { KEYGLINT.visible = false; return; }
+    const tw = 0.55 + 0.45 * Math.abs(Math.sin(performance.now() / 160 + k.x * 3)); KEYGLINT.visible = true; KEYGLINT.position.set(k.x, k.y + 0.05, k.z);
+    KEYGLINT.material.opacity = tw * Math.min(1, (inBeam - 0.94) / 0.04) * Math.min(1, 6 / d); const sc = (0.18 + 0.2 * tw) * Math.max(1, d / 5); KEYGLINT.scale.set(sc, sc, 1); /* 遠一點光點相對大一點，才看得到 */
+  }
   function keyStep(dt) { // 追逐中倒數，時間到、他在走路時，鑰匙從他身上掉下來（小小的叮噹聲，玩家要自己注意到）
     if (G.phase !== 'chase' || G.keyDropped || !enemy.active || G.paused || dlgState || !(G.keyT > 0)) return;
     G.keyT -= dt; if (G.keyT > 0 || !enemy.moving || enemy.stun > 0 || !TEX.key) return;
@@ -3299,7 +3311,7 @@ function buildProps(DORM, scene) {
   }
   function makeDropMesh(type, flat) {
     const tex = TEX[type]; const h = { whey: 0.3, pot: 0.26, remote: 0.2, card: 0.1, cig: 0.12, key: 0.09 }[type];
-    if (flat && (type === 'card' || type === 'remote' || type === 'key')) { const w = type === 'card' ? 0.17 : type === 'key' ? 0.11 : 0.06, l = w * tex.image.height / tex.image.width; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), new THREE.MeshPhongMaterial(type === 'key' ? { shininess: 90, specular: 0x8a8a8a, map: tex, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x262626, emissiveMap: tex } : { shininess: 6, specular: 0x0a0a0a,  map: tex, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x161616, emissiveMap: tex })); m.rotation.x = -Math.PI / 2; m.rotation.z = rand(0, Math.PI * 2); scene.add(m); return m; }
+    if (flat && (type === 'card' || type === 'remote' || type === 'key')) { const w = type === 'card' ? 0.17 : type === 'key' ? 0.22 : 0.06, l = w * tex.image.height / tex.image.width; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), new THREE.MeshPhongMaterial(type === 'key' ? { shininess: 140, specular: 0xd0d0c8, map: tex, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x2a2a2a, emissiveMap: tex } : { shininess: 6, specular: 0x0a0a0a,  map: tex, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x161616, emissiveMap: tex })); m.rotation.x = -Math.PI / 2; m.rotation.z = rand(0, Math.PI * 2); scene.add(m); return m; }
     const m = billboard(tex, h, type === 'card' ? 0x222222 : 0x111111); m.userData.drop = true; return m;
   }
   function removeDrop(dr) { if (dr.mesh) scene.remove(dr.mesh); const i = DROPS.indexOf(dr); if (i >= 0) DROPS.splice(i, 1); if (G.lureDrop === dr) G.lureDrop = null; }
@@ -3541,6 +3553,7 @@ function buildProps(DORM, scene) {
       if (on !== G.flickOn) { G.flickOn = on; if (on === 0) try { SFX.click(false); } catch (e) { } }
       if (G.flick <= 0) { G.flick = 0; setFlash(false, true); G.flashDead = 3; toast('手電筒熄掉了……', 1600); }
     } else if (G.flashDead > 0 && !G.paused) G.flashDead -= dt;
+    keyGlint();
     if (P.light && !(G.flick > 0)) {
       let hit = 9; for (let d = 0.3; d < 9; d += 0.3) { if (world.pointSolid(lx + flashDir.x * d, ly + flashDir.y * d, lz + flashDir.z * d)) { hit = d; break; } }
       const bd = Math.max(0.3, hit - 0.45); flashSpill.position.set(lx + flashDir.x * bd, ly + flashDir.y * bd, lz + flashDir.z * bd);

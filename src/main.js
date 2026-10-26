@@ -1099,7 +1099,7 @@
     Object.assign(G, { phase: 'intro', paused: false, enemyDist: 99, chaseMix: 0, enemySpeedMul: 1, items: [], cur: -1, hold: 0, holding: false, questT: 0, hintShown: false, sips: 0, hits: 0, startTime: performance.now(), bed: null, target: null, shake: 0 });
     enemy.reset(); enemyMesh.visible = false; npcMesh.visible = true; npcMesh.position.set(npcPos.x, 0, npcPos.z); npcBox.on = true; doorBox.on = true;
     eSpot.intensity = 0; eGlow.intensity = 0; eSpot.color.setHex(0xff1410); stunMesh.visible = false;
-    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; G.hbForce = false; G.bedScene = false; G.peekTilt = 0; G.keyT = 0; G.keyDropped = false; G.keyHint = false; if (enemyMesh) enemyMesh.material.emissive.setHex(ENEMY_EMI); if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
+    for (const dr of DROPS.slice()) removeDrop(dr); G.lureDrop = null; HOU.talked = 0; G.panDone = false; G.panWalk = null; G.cigs = 0; G.boostT = 0; G.broken = false; G.airTop = null; G.hurtT = 0; G.hbForce = false; G.bedScene = false; G.peekTilt = 0; G.keyT = 0; G.keyDropped = false; G.keyHint = false; G.flick = 0; G.flashDead = 0; if (enemyMesh) enemyMesh.material.emissive.setHex(ENEMY_EMI); if (panMesh) panMesh.visible = false; zhuReset(); fallDoorReset(); $('sub').classList.remove('show');
     spawnItems(); renderSlots(); tvReset();
     for (const d of DOORS) { d.open = false; d.ang = 0; d.piv.rotation.y = d.base; d.box.on = true; }
     MAIN.open = false; MAIN.ang = 0; for (const l of MAIN.leaves) l.piv.rotation.y = 0;
@@ -1374,7 +1374,7 @@
     if ((e.code === 'Digit1' || e.code === 'Digit2') && G.items.length) { const i = e.code === 'Digit1' ? 0 : 1; if (G.items[i]) { G.cur = i; renderSlots(); } }
     if (e.code === 'Digit3' && G.items[2]) { G.cur = 2; renderSlots(); }
     if (e.code === 'Digit4' && G.items[3]) { G.cur = 3; renderSlots(); }
-    if (e.code === 'KeyG' && !e.repeat && playable() && !G.paused) setFlash(!P.light);
+    if (e.code === 'KeyG' && !e.repeat && playable() && !G.paused) { if (G.flick > 0 || G.flashDead > 0) { SFX.click(false); toast('手電筒沒反應……', 1200); } else setFlash(!P.light); } // 失靈中按不亮
     if (e.code === 'KeyQ' && !e.repeat) dropCurrent();
   });
   window.addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'KeyF') { G.holding = false; G.hold = 0; } });
@@ -1461,7 +1461,7 @@
     if (G.phase === 'chase' && !G.paused && !dlgState) {
       const evs = enemy.update(dt, P);
       for (const ev of evs) {
-        if (ev === 'spot') { SFX.sting(); toast('他看到你了！', 1600); }
+        if (ev === 'spot') { SFX.sting(); toast('他看到你了！', 1600); if (P.light && !(G.flick > 0)) { G.flick = 1.3; G.flickSeed = Math.random() * 100; } } // 被發現：手電筒一閃一閃後熄滅
         else if (ev === 'catch') { caught('floor'); break; }
         else if (ev === 'hideCatch') { caught('bed'); break; }
         else if (ev === 'lose') toast('他好像跟丟你了……', 2000);
@@ -1558,7 +1558,14 @@
     flash.position.set(lx, ly, lz); flood.position.set(lx, ly, lz);
     flash.target.position.set(lx + flashDir.x * 6, ly + flashDir.y * 6, lz + flashDir.z * 6); flood.target.position.copy(flash.target.position);
     // 反射補光：找出光線打到的第一個表面，在它前面放一盞很弱的暖光
-    if (P.light) {
+    if (G.flick > 0 && !G.paused) { // 手電筒失靈：一閃一閃（越來越暗、閃得越來越久），最後熄滅 3 秒，之後要自己按 G 重開
+      G.flick -= dt; const k = 1 - G.flick / 1.3, n = Math.sin((G.flickSeed + performance.now() / 1000) * (38 + 20 * k)) + Math.sin(performance.now() / 23 + G.flickSeed);
+      const on = n > -0.3 + k * 1.2 ? 1 : 0, lvl = on * (0.55 + 0.45 * Math.random()) * (1 - 0.5 * k);
+      flash.intensity = FLASH_I * lvl; flood.intensity = FLOOD_I * lvl; flashSpill.intensity *= on;
+      if (on !== G.flickOn) { G.flickOn = on; if (on === 0) try { SFX.click(false); } catch (e) { } }
+      if (G.flick <= 0) { G.flick = 0; setFlash(false, true); G.flashDead = 3; toast('手電筒熄掉了……', 1600); }
+    } else if (G.flashDead > 0 && !G.paused) G.flashDead -= dt;
+    if (P.light && !(G.flick > 0)) {
       let hit = 9; for (let d = 0.3; d < 9; d += 0.3) { if (world.pointSolid(lx + flashDir.x * d, ly + flashDir.y * d, lz + flashDir.z * d)) { hit = d; break; } }
       const bd = Math.max(0.3, hit - 0.45); flashSpill.position.set(lx + flashDir.x * bd, ly + flashDir.y * bd, lz + flashDir.z * bd);
       const target = BOUNCE_I * clamp(1.15 - hit / 9, 0.15, 1); flashSpill.intensity += (target - flashSpill.intensity) * (1 - Math.exp(-dt * 10));

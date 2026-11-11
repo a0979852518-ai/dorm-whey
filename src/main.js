@@ -328,61 +328,138 @@
     sm.userData.bones = bones; sm.userData.hipY = bones[0].position.y;
     return sm;
   }
-  // 動作：run 0~1 = 站著→全力衝刺，walk 0~1 = 走路，ph = 步伐相位（弧度）
-  const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _e = new THREE.Euler();
-  function kemaoPose(sm, ph, run, walk, t) {
-    const b = sm.userData.bones, R = (i, x, y, z, order) => { _e.set(x, y, z, order || 'XYZ'); b[i].quaternion.setFromEuler(_e); };
-    const s = Math.sin(ph), c = Math.cos(ph), mv = Math.max(run, walk);
-    const amp = 0.38 * walk + 0.78 * run;                  /* 腿擺幅 */
-    const lean = 0.05 * walk + 0.32 * run;                  /* 身體前傾 */
-    const breath = Math.sin(t * 1.7) * 0.012 * (1 - mv);
-    b[0].position.y = sm.userData.hipY - 0.07 * run + (0.025 * walk + 0.06 * run) * Math.abs(Math.sin(ph)) - 0.03 * run;
-    R(0, lean * 0.5, s * 0.18 * mv, 0);
-    R(1, lean * 0.3 + breath, -s * 0.12 * mv, 0);
-    R(2, lean * 0.2 - breath, -s * 0.16 * mv, 0);
-    /* 扭曲：脊椎 S 形側彎、脖子往前伸、頭歪一邊並不規則抽動 */
-    const tw = Math.sin(t * 23) * Math.max(0, Math.sin(t * 2.3)) + 0.5 * Math.sin(t * 37) * Math.max(0, Math.sin(t * 1.3 + 2));
-    b[1].quaternion.multiply(_qa.setFromEuler(_e.set(0, 0, 0.16 * run)));
-    b[2].quaternion.multiply(_qa.setFromEuler(_e.set(0, 0, -0.12 * run)));
-    R(3, -lean * 0.6 + 0.3 * run, s * 0.08 * mv, 0.12 * run);
-    R(4, -lean * 0.3 - 0.68 * run + 0.05 * run * Math.sin(ph * 2) + 0.06 * run * tw, 0.1 * run * tw, Math.sin(t * 0.6) * 0.04 * (1 - mv) + 0.42 * run + 0.14 * run * tw);   /* 頭歪一邊、仰著盯玩家 */
-    /* 手：從 T 字放下來，跑步時大幅前後擺、手肘彎 */
-    const down = 1.2 + 0.05 * (1 - mv), sw = (0.35 * walk + 1.0 * run) * s;
-    const elb = 0.15 + 0.2 * walk + 1.35 * run;
-    _qa.setFromEuler(_e.set(0, 0, -down)); _qb.setFromEuler(_e.set(sw, 0, 0)); b[6].quaternion.copy(_qb).multiply(_qa);
-    _qa.setFromEuler(_e.set(0, 0, down)); _qb.setFromEuler(_e.set(-sw, 0, 0)); b[10].quaternion.copy(_qb).multiply(_qa);
-    R(7, 0, -elb - 0.25 * run * Math.max(0, -s), 0); R(11, 0, elb + 0.25 * run * Math.max(0, s), 0);
-    R(8, 0, 0, -0.1); R(12, 0, 0, 0.1);
-    if (walk > 0.001) { /* 巡查：雙手無力垂著像鐘擺晃、身體左右搖、頭跟著甩、步伐一長一短 */
-      const sw2 = Math.sin(ph - 0.7), roll = Math.sin(ph);
-      const aL = _qb.setFromEuler(_e.set(0.28 * sw2 + 0.06, 0, 0)).multiply(_qa.setFromEuler(_e.set(0, 0, -1.48 - 0.08 * roll)));
-      b[6].quaternion.slerp(aL, walk);
-      const aR = _qb.setFromEuler(_e.set(-0.28 * sw2 + 0.06, 0, 0)).multiply(_qa.setFromEuler(_e.set(0, 0, 1.48 - 0.08 * roll)));
-      b[10].quaternion.slerp(aR, walk);
-      b[7].quaternion.slerp(_qa.setFromEuler(_e.set(0, -0.12 - 0.1 * Math.max(0, sw2), 0)), walk); b[11].quaternion.slerp(_qa.setFromEuler(_e.set(0, 0.12 + 0.1 * Math.max(0, -sw2), 0)), walk);
-      b[8].quaternion.slerp(_qa.setFromEuler(_e.set(0, 0, -0.25)), walk); b[12].quaternion.slerp(_qa.setFromEuler(_e.set(0, 0, 0.25)), walk);
-      b[0].quaternion.multiply(_qa.setFromEuler(_e.set(0, 0, 0.1 * walk * roll)));
-      b[0].position.x = 0.035 * walk * roll;
-      b[1].quaternion.multiply(_qa.setFromEuler(_e.set(0.06 * walk, 0, -0.07 * walk * roll)));
-      b[2].quaternion.multiply(_qa.setFromEuler(_e.set(0.12 * walk, 0, -0.06 * walk * roll)));
-      b[3].quaternion.multiply(_qa.setFromEuler(_e.set(0.15 * walk, 0, 0)));
-      b[4].quaternion.multiply(_qa.setFromEuler(_e.set(0.12 * walk, 0.08 * walk * Math.sin(ph * 0.5), walk * (0.2 + 0.16 * Math.sin(ph - 1.1)))));
-      b[13].quaternion.multiply(_qa.setFromEuler(_e.set(-0.1 * walk * Math.sin(ph), 0, 0)));   /* 左腳步子大、右腳拖著 */
-      b[17].quaternion.multiply(_qa.setFromEuler(_e.set(-0.15 * walk * Math.max(0, Math.sin(ph - 0.9)), 0, 0)));
-    } else b[0].position.x = 0;
-    if (run > 0.001) { /* 追人：雙手向前伸直，一高一低、跟著步伐上下晃、偶爾抽一下 */
-      const qL = _qb.setFromEuler(_e.set(-0.42 + 0.1 * s + 0.08 * tw, 0, 0)).multiply(_qa.setFromEuler(_e.set(0, -1.42, 0)));
-      b[6].quaternion.slerp(qL, run);
-      const qR = _qb.setFromEuler(_e.set(-0.58 - 0.1 * s - 0.06 * tw, 0, 0)).multiply(_qa.setFromEuler(_e.set(0, 1.38, 0)));
-      b[10].quaternion.slerp(qR, run);
-      b[7].quaternion.slerp(_qa.setFromEuler(_e.set(0, 0.06, -0.08)), run); b[11].quaternion.slerp(_qa.setFromEuler(_e.set(0, -0.06, 0.12)), run);
-      b[8].quaternion.slerp(_qa.setFromEuler(_e.set(0.3, 0, -0.35)), run); b[12].quaternion.slerp(_qa.setFromEuler(_e.set(0.3, 0, 0.35)), run);
-    } R(5, 0, -0.25 * run, 0.22 * run - 0.08 * run * c); R(9, 0, 0.18 * run, -0.12 * run - 0.08 * run * c); /* 聳肩、往前探 */
-    /* 腳：大腿前後擺（反向於手），膝蓋在後擺時彎得很深 */
-    const kL = 0.12 * mv + (0.55 * walk + 1.55 * run) * Math.max(0, -Math.sin(ph - 0.9)), kR = 0.12 * mv + (0.55 * walk + 1.55 * run) * Math.max(0, Math.sin(ph - 0.9));
-    R(13, -amp * s - lean * 0.6, 0, 0.03); R(16, amp * s - lean * 0.6, 0, -0.03);
-    R(14, kL, 0, 0); R(17, kR, 0, 0);
-    R(15, -0.3 * run * Math.max(0, s) + 0.15 * walk * s, 0, 0); R(18, -0.3 * run * Math.max(0, -s) - 0.15 * walk * s, 0, 0);
+  /* ── 動作 ──
+     腿：照真實步態的關鍵格（每個循環 12 格，週期性 Catmull-Rom 平滑內插），走路／跑步依實際速度混合，步伐相位跟著移動距離走。
+     上半身：看到玩家＝雙手向前伸直、仰頭歪頭；沒看到＝雙手無力垂著、駝背低頭。
+     手臂、頭、前傾、轉彎傾斜都用彈簧帶動，會有慣性、延遲與回彈；頭偶爾會突然抽一下。 */
+  const KD = Math.PI / 180;
+  function kcr(k, p) { const n = k.length, x = (((p % 1) + 1) % 1) * n, i = Math.floor(x), f = x - i, a = k[(i + n - 1) % n], b = k[i], c = k[(i + 1) % n], d = k[(i + 2) % n]; return b + 0.5 * f * (c - a + f * (2 * a - 5 * b + 4 * c - d + f * (3 * (b - c) + d - a))); }
+  const KR = (i, j) => new THREE.Vector3(KB[j][1] - KB[i][1], KB[j][2] - KB[i][2], KB[j][3] - KB[i][3]);
+  const KL1 = KR(13, 14).length(), KL2 = KR(14, 15).length(), KD1 = KR(13, 14).normalize(), KD2 = KR(14, 15).normalize();
+  const KTOE = new THREE.Vector3(0, -0.06, 0.21), KHEEL = new THREE.Vector3(0, -0.085, -0.05);
+  const _pole = new THREE.Vector3(), _ftL = { v: new THREE.Vector3(), pitch: 0 }, _ftR = { v: new THREE.Vector3(), pitch: 0 };
+  const _k1 = new THREE.Vector3(), _k2 = new THREE.Vector3(), _k3 = new THREE.Vector3(), _k4 = new THREE.Vector3(), _k5 = new THREE.Vector3(), _kq1 = new THREE.Quaternion(), _kq2 = new THREE.Quaternion(), _kq3 = new THREE.Quaternion();
+  const ksm = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+  /* 某隻腳在這個相位時，腳踝應該在哪裡（模型自己的座標），腳掌的角度 */
+  function kfootTarget(q, L, beta, side, rl, mv, drag, out) {
+    out = out || _ftL; q = ((q % 1) + 1) % 1;
+    const c = -0.07 + 0.1 * rl, z0 = c + L * beta / 2, zb = c - L * beta / 2, ah = 0.09;
+    let y = ah, z, pitch;
+    if (q < beta) { /* 支撐：腳踩著地往後退 */
+      z = z0 - L * q; const u = q / beta;
+      pitch = (1 - rl) * (-0.24 * (1 - ksm(u / 0.18)) + 0.6 * ksm((u - 0.62) / 0.38)) + rl * (0.16 + 0.5 * ksm((u - 0.45) / 0.55));
+    } else { /* 擺盪：腳抬起來往前送 */
+      /* Hermite 曲線：離地、著地那一刻腳相對地面都是靜止的（不會一落地就滑） */
+      const sw = (q - beta) / (1 - beta), m0 = -L * (1 - beta), s2 = sw * sw, s3 = s2 * sw;
+      z = (2 * s3 - 3 * s2 + 1) * zb + (s3 - 2 * s2 + sw) * m0 + (-2 * s3 + 3 * s2) * z0 + (s3 - s2) * m0;
+      const pS = 0.6 * (1 - rl) + 0.66 * rl, pE = -0.24 * (1 - rl) + 0.16 * rl;
+      const offS = 0.21 + 0.06 * Math.sin(pS) - 0.21 * Math.cos(pS), offE = pE > 0 ? 0.21 + 0.06 * Math.sin(pE) - 0.21 * Math.cos(pE) : -0.05 + 0.085 * Math.sin(pE) + 0.05 * Math.cos(pE);
+      z += offS * (1 - ksm(sw * 2.2)) + offE * ksm((sw - 0.55) / 0.45);
+      const lift = (0.1 - 0.05 * drag) * (1 - rl) + 0.33 * rl;
+      y = ah + lift * Math.pow(Math.sin(Math.PI * Math.pow(sw, 0.75)), 1.2);
+      const p0 = 0.6 * (1 - rl) + 0.66 * rl, p1 = -0.24 * (1 - rl) + 0.16 * rl;
+      pitch = p0 + (p1 - p0) * ksm(sw * 1.25) + 0.3 * drag * Math.sin(Math.PI * sw);
+    }
+    /* 支撐時：腳跟抬起就以腳尖為支點、腳尖勾起就以腳跟為支點，腳踝位置跟著算 */
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    if (q < beta) { if (pitch > 0) z += 0.21 + 0.06 * sp - 0.21 * cp; else z += -0.05 + 0.085 * sp + 0.05 * cp; }
+    /* 不穿地：腳尖、腳跟都要在地面上 */
+    y = Math.max(y, 0.03 + 0.06 * cp + 0.21 * sp, 0.005 + 0.085 * cp - 0.05 * sp);
+    const rx = KB[15][1] * side, ry = KB[15][2], rz = KB[15][3];
+    out.v.set(rx + (0.1 * side - rx) * mv, ry + (y - ry) * mv, rz + (z - rz) * mv); out.pitch = pitch * mv;
+    return out;
+  }
+  /* 兩段式 IK：髖關節到腳踝，膝蓋朝 pole 方向彎 */
+  function kfootIK(b, hi, ki, fi, ft, pole) {
+    const Qh = b[0].quaternion, H = _k1.copy(b[hi].position).applyQuaternion(Qh).add(b[0].position);
+    const d = _k2.copy(ft.v).sub(H); let D = d.length(); d.normalize(); D = Math.max(Math.abs(KL1 - KL2) + 1e-3, Math.min(D, (KL1 + KL2) * 0.9995));
+    const a1 = Math.acos(Math.max(-1, Math.min(1, (KL1 * KL1 + D * D - KL2 * KL2) / (2 * KL1 * D))));
+    const n = _k3.copy(pole).addScaledVector(d, -pole.dot(d)).normalize();
+    const t1 = _k4.copy(d).multiplyScalar(Math.cos(a1)).addScaledVector(n, Math.sin(a1));
+    const t2 = _k5.copy(d).multiplyScalar(D).addScaledVector(t1, -KL1).normalize();
+    const Qt = _kq1.setFromUnitVectors(KD1, t1);
+    b[hi].quaternion.copy(Qh).invert().multiply(Qt);
+    b[ki].quaternion.setFromUnitVectors(KD2, t2.applyQuaternion(_kq2.copy(Qt).invert()));
+    const Qs = _kq3.copy(Qt).multiply(b[ki].quaternion);
+    b[fi].quaternion.copy(Qs).invert().multiply(_kq2.setFromEuler(_e.set(ft.pitch, 0, 0)));
+  }
+  const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qc = new THREE.Quaternion(), _e = new THREE.Euler();
+  const kq = (q, x, y, z, o) => q.setFromEuler(_e.set(x, y, z, o || 'XYZ'));
+  function kspring(s, key, target, k, c, dt) { const v = (s[key + 'v'] || 0) + ((target - (s[key] || 0)) * k - (s[key + 'v'] || 0) * c) * dt; s[key + 'v'] = v; s[key] = (s[key] || 0) + v * dt; return s[key]; }
+  function kemaoAnim(sm, dt, o) { /* o: { speed 公尺/秒, sees 是否看到玩家, yaw 面向, still 不准動(暈眩等), noTwitch } */
+    const b = sm.userData.bones, S = sm.userData.anim || (sm.userData.anim = { ph: 0, t: 0, tw: 1.5 });
+    dt = Math.min(dt, 0.05); S.t += dt;
+    const sub = dt > 1 / 90 ? Math.ceil(dt * 120) : 1, h = dt / sub; /* 彈簧分小步積分，低幀率時也穩定 */
+    const spd = o.still ? 0 : o.speed;
+    let mv = 0; for (let i = 0; i < sub; i++) mv = kspring(S, 'mv', Math.min(1, spd / 0.6), 90, 19, h);
+    mv = Math.max(0, Math.min(1, mv));
+    const runW = Math.max(0, Math.min(1, (spd - 2.4) / 1.5)); let rl = 0; for (let i = 0; i < sub; i++) rl = kspring(S, 'rl', runW * runW * (3 - 2 * runW), 60, 15, h);
+    rl = Math.max(0, Math.min(1, rl));
+    const stride = 1.3 + (2.55 - 1.3) * rl;
+    S.ph = (S.ph + spd * dt / stride) % 1000;
+    const p = S.ph;
+    let reach = 0; for (let i = 0; i < sub; i++) reach = kspring(S, 'rc', o.sees ? 1 : 0, 70, 16, h);
+    reach = Math.max(0, Math.min(1.05, reach)); const dang = 1 - Math.min(1, reach);
+    /* 轉彎：身體往內傾；加速：往前傾 */
+    const yr = S.yaw0 === undefined ? 0 : Math.atan2(Math.sin(o.yaw - S.yaw0), Math.cos(o.yaw - S.yaw0)) / Math.max(dt, 1e-3); S.yaw0 = o.yaw;
+    const acc = (spd - (S.sp0 || 0)) / Math.max(dt, 1e-3); S.sp0 = spd;
+    let bank = 0, aLean = 0; for (let i = 0; i < sub; i++) { bank = kspring(S, 'bk', Math.max(-0.22, Math.min(0.22, -yr * spd * 0.035)), 40, 11, h); aLean = kspring(S, 'al', Math.max(-0.12, Math.min(0.18, acc * 0.03)), 30, 9, h); }
+    /* 頭突然抽動：隨機時間點給頭一個偏移目標，硬彈簧拉過去再放開 */
+    S.tw -= dt; if (S.tw <= 0 && !o.noTwitch) { const big = o.sees ? 1 : 0.7; S.twx = (Math.random() - 0.5) * 0.5 * big; S.twy = (Math.random() - 0.5) * 0.7 * big; S.twz = (Math.random() - 0.5) * 0.9 * big; S.twHold = 0.09 + Math.random() * 0.12; S.tw = o.sees ? 0.5 + Math.random() * 1.6 : 1.8 + Math.random() * 3.5; }
+    if (S.twHold > 0) S.twHold -= dt; else { S.twx = S.twy = S.twz = 0; }
+    /* ── 腿（腳步落點＋兩段式 IK）── 支撐腳在地上往後退的速度剛好等於他前進的速度，所以不會滑步；腳跟、腳尖都不會穿進地板 */
+    const P2 = 2 * Math.PI, drag = (1 - rl) * dang; /* 巡查時右腳拖著走 */
+    const beta = 0.6 * (1 - rl) + 0.31 * rl;               /* 一個循環裡腳踩在地上的比例 */
+    const bobW = 0.022 * Math.cos(2 * P2 * (p - 0.3)) - 0.02 * Math.max(0, Math.cos(P2 * (p - 0.04))) * drag;
+    const bobR = 0.032 * Math.cos(2 * P2 * (p - 0.385));
+    const hipDrop = (0.03 * (1 - rl) + 0.015 * rl) * mv;
+    b[0].position.y = sm.userData.hipY - hipDrop + ((1 - rl) * bobW + rl * bobR) * mv;
+    let sway; for (let i = 0; i < sub; i++) sway = kspring(S, 'sw', (0.03 * (1 - rl) * Math.sin(P2 * (p - 0.05)) * (1 + 0.5 * dang)) * mv + 0.012 * Math.sin(S.t * 0.55) * (1 - mv), 70, 14, h);
+    if (sm.userData.hipZ === undefined) sm.userData.hipZ = b[0].position.z;
+    b[0].position.x = sway; b[0].position.z = sm.userData.hipZ + (0.02 * (1 - rl) + 0.09 * rl) * mv; /* 跑的時候骨盆往前送，整個人前傾而不是翹屁股 */
+    const pYaw = (-0.08 * (1 - rl) - 0.14 * rl) * Math.sin(P2 * (p - 0.55)) * mv;
+    const pRoll = ((0.05 + 0.05 * dang) * (1 - rl) * Math.sin(P2 * (p - 0.05)) + 0.04 * rl * Math.cos(P2 * (p - 0.1))) * mv;
+    const lean = (0.03 + 0.05 * spd) * (0.6 + 0.4 * reach) + aLean + 0.06 * dang + 0.3 * rl * Math.min(1, reach);
+    kq(b[0].quaternion, lean * 0.3, pYaw, pRoll + bank, 'YXZ');
+    kfootIK(b, 13, 14, 15, kfootTarget(p, stride, beta, 1, rl, mv, 0), _pole.set(0.08, 0, 1));
+    kfootTarget(p + 0.5 + 0.025 * (1 - rl), stride, beta, -1, rl, mv, drag, _ftR);
+    kfootIK(b, 16, 17, 18, _ftR, _pole.set(-0.08, 0, 1));
+    /* ── 軀幹 ── */
+    const breath = Math.sin(S.t * 1.7) * 0.014 * (1 - mv);
+    kq(b[1].quaternion, lean * 0.38 + 0.06 * dang + breath, -pYaw * 0.6, -pRoll * 0.6 + 0.14 * reach);
+    kq(b[2].quaternion, lean * 0.3 + 0.12 * dang - breath, -pYaw * 0.8, -pRoll * 0.3 - 0.1 * reach);
+    /* ── 頭：彈簧跟著身體，有延遲；看到人時仰頭歪頭盯著，巡查時低頭甩 ── */
+    let hx, hy, hz;
+    const hxT = reach * (-0.62 - lean * 0.5) + dang * (0.22 + 0.06 * Math.sin(P2 * p * 2) * mv) + (S.twx || 0);
+    const hyT = -pYaw * 0.5 + (S.twy || 0) + 0.12 * Math.sin(S.t * 0.4) * (1 - mv);
+    const hzT = reach * 0.38 + dang * (0.16 + 0.14 * Math.sin(P2 * (p - 0.2)) * mv) - (pRoll + bank) * 0.6 + (S.twz || 0);
+    const hk = S.twHold > 0 ? 520 : 90, hc = S.twHold > 0 ? 26 : 10;
+    for (let i = 0; i < sub; i++) { hx = kspring(S, 'hx', hxT, hk, hc, h); hy = kspring(S, 'hy', hyT, hk, hc, h); hz = kspring(S, 'hz', hzT, hk, hc, h); }
+    kq(b[3].quaternion, 0.3 * reach + 0.2 * dang - lean * 0.2, hy * 0.3, hz * 0.3);
+    kq(b[4].quaternion, hx, hy * 0.7, hz * 0.7, 'YXZ');
+    /* ── 手臂 ── */
+    /* 垂手：像鐘擺，被步伐和身體帶著晃，有延遲和回彈；停下來還會再晃幾下 */
+    let swL, swR, spL, spR;
+    const swT = (-0.55 * (1 - rl) - 0.9 * rl) * mv;
+    for (let i = 0; i < sub; i++) {
+      swL = kspring(S, 'aL', swT * Math.sin(P2 * (p - 0.02)) + aLean * 1.5, 38, 3.2, h);
+      swR = kspring(S, 'aR', -swT * Math.sin(P2 * (p - 0.02)) * 0.85 + aLean * 1.5, 34, 2.8, h);
+      spL = kspring(S, 'sL', 0.1 * pRoll / 0.12 + bank * 1.2, 30, 4, h); spR = kspring(S, 'sR', -0.1 * pRoll / 0.12 - bank * 1.2, 30, 4, h);
+    }
+    kq(_qa, 0, 0, -1.47 + spL); kq(_qb, swL, 0, 0); _qc.copy(_qb).multiply(_qa);
+    /* 伸手：雙手向前伸直、一高一低，跟著步伐上下晃，偶爾抽一下 */
+    let rbL, rbR; for (let i = 0; i < sub; i++) { rbL = kspring(S, 'bL', 0.09 * Math.sin(P2 * (p + 0.1)) * mv + (S.twz || 0) * 0.15, 60, 7, h); rbR = kspring(S, 'bR', -0.08 * Math.sin(P2 * (p + 0.1)) * mv - (S.twx || 0) * 0.2, 55, 6, h); }
+    const rq = Math.min(1, reach);
+    kq(_qa, 0, -1.36, 0); kq(_qb, -0.4 - lean * 0.8 + rbL, 0, 0); _qb.multiply(_qa); b[6].quaternion.copy(_qc).slerp(_qb, rq);
+    kq(_qa, 0, 0, 1.47 - spR); kq(_qb, swR, 0, 0); _qc.copy(_qb).multiply(_qa);
+    kq(_qa, 0, 1.34, 0); kq(_qb, -0.56 - lean * 0.8 + rbR, 0, 0); _qb.multiply(_qa); b[10].quaternion.copy(_qc).slerp(_qb, rq);
+    /* 手肘、手腕、肩膀 */
+    const elbL = 0.14 + 0.18 * Math.max(0, -swL) + 0.25 * rl * mv, elbR = 0.14 + 0.18 * Math.max(0, swR) + 0.25 * rl * mv;
+    kq(_qa, 0, -elbL, 0); kq(_qb, 0, 0.06, -0.08 + 0.04 * rbL); b[7].quaternion.copy(_qa).slerp(_qb, rq);
+    kq(_qa, 0, elbR, 0); kq(_qb, 0, -0.06, 0.12 + 0.04 * rbR); b[11].quaternion.copy(_qa).slerp(_qb, rq);
+    kq(_qa, -0.1 * swL, 0, -0.22); kq(_qb, 0.3, 0, -0.38); b[8].quaternion.copy(_qa).slerp(_qb, rq);
+    kq(_qa, 0.1 * swR, 0, 0.22); kq(_qb, 0.3, 0, 0.38); b[12].quaternion.copy(_qa).slerp(_qb, rq);
+    kq(b[5].quaternion, 0, -0.06 * rq, 0.2 * rq - 0.05 * dang); kq(b[9].quaternion, 0, 0.05 * rq, -0.12 * rq + 0.05 * dang);
   }
   const ERUN = { frames: null, geo: null, still: null, cur: -1 }; let ENEMY_EMI = 0, npcMesh, enemyMesh, wheyMesh, potMesh, stunMesh, houMesh, panMesh; const TEX = {}, BAGS = [];
   const HOU = DORM.hou;
@@ -394,14 +471,14 @@
     const nc = document.createElement('canvas'); nc.width = 160; nc.height = 90; TV.noiseCanvas = nc; TV.noise = new THREE.CanvasTexture(nc);
     TV.light = new THREE.SpotLight(0x9fb4d8, 0, 10, 1.15, 1, 2); TV.light.position.set(t.x + t.nx * 0.15, t.y, t.z + t.nz * 0.15); TV.light.target.position.set(t.x + t.nx * 7, 3.6, t.z + t.nz * 7); scene.add(TV.light); scene.add(TV.light.target);
   }
-  const ready = Promise.all([loadTex(A.p1), loadTex(A.p2), loadTex(A.whey), loadTex(A.pot), loadTex(A.tv1), loadTex(A.tv2), loadTex(A.tv3), loadTex(A.tv4), loadTex(A.remote), loadTex(A.hou), loadTex(A.bags2), loadTex(A.bag1), loadTex(A.card), loadTex(A.kemao_npc_tex), loadTex(A.kemao_chase_tex)]).then(([t1, t2, tw, tp, v1, v2, v3, v4, rm, th, tb2, tb1, tc, tkn, tkc]) => {
+  const ready = Promise.all([loadTex(A.p1), loadTex(A.p2), loadTex(A.whey), loadTex(A.pot), loadTex(A.tv1), loadTex(A.tv2), loadTex(A.tv3), loadTex(A.tv4), loadTex(A.remote), loadTex(A.hou), loadTex(A.bags2), loadTex(A.bag1), loadTex(A.card), loadTex(A.kemao_npc2d), loadTex(A.kemao_chase_tex)]).then(([t1, t2, tw, tp, v1, v2, v3, v4, rm, th, tb2, tb1, tc, tkn, tkc]) => {
     TV.tex = [v1, v2, v3, v4]; TEX.whey = tw; TEX.pot = tp; TEX.remote = rm; TEX.card = tc; loadTex(A.key).then((t) => { TEX.key = t; });
     // 208 號房：受傷的侯宸宇（躺在靠窗左側地上）、乳清旁的垃圾袋
     houMesh = billboard(th, 0.56, 0x050505, 0x8a8a8a); houMesh.position.set(HOU.x, HOU.y, HOU.z);
     for (const [ti, x, z, h] of DORM.bags) { const tx = ti ? tb1 : tb2; const m = billboard(tx, h, 0x050505); m.position.set(x, DORM.F + 0.01, z); BAGS.push(m); world.dyn.push({ n: 'bag', x0: x - 0.22, x1: x + 0.22, z0: z - 0.22, z1: z + 0.22, y0: 3.35, y1: 3.35 + h * 0.85 }); }
     { const r = LNG.remote; const w = 0.06, h = w * rm.image.height / rm.image.width; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a,  map: rm, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x111111, emissiveMap: rm }));
       m.rotation.x = -Math.PI / 2; m.rotation.z = 0.5; m.position.set(r.x, r.y + 0.018, r.z); scene.add(m); TV.remoteMesh = m; }
-    npcMesh = kemaoModel(A.kemao_npc_geo, tkn, 0x050505, 0x9a9a9a); /* 一般型態：夾克、手插口袋 */
+    npcMesh = billboard(tkn, 1.78, 0x050505, 0x8a8a8a); /* 一般型態：2D 照片（夾克、手插口袋） */
     enemyMesh = kemaoModel(A.kemao_chase_geo, tkc, 0x2a0606, 0xa09494, true); ENEMY_EMI = enemyMesh.material.emissive.getHex(); enemyMesh.visible = false; /* 追逐型態：背心、張開雙手 */
     wheyMesh = billboard(tw, 0.3, 0x15110a);
     potMesh = billboard(tp, 0.26, 0x0e0e0e);
@@ -1504,7 +1581,7 @@
       P.crouch = !!(keys.ControlLeft || keys.ControlRight) && P.grounded; // 按住 Ctrl 蹲下：走得很慢、腳步很輕、不能跑，比較不容易被看到、聽到
       P.cr = (P.cr || 0) + ((P.crouch ? 1 : 0) - (P.cr || 0)) * (1 - Math.exp(-dt * 9));
       P.running = !!(want && P.stamina > 0 && !P.exhausted && !ZHU.slow && !P.crouch && !G.broken); // 看到竹竿時被迫用走的
-      if (P.running) P.stamina = Math.max(0, P.stamina - 15 * dt); else P.stamina = Math.min(100, P.stamina + 10 * dt);
+      if (P.running) P.stamina = Math.max(0, P.stamina - 9 * dt); else P.stamina = Math.min(100, P.stamina + 10 * dt);
       const sp = (P.running ? 5.0 : 1.55) * // 走路放慢（探索時壓抑的步調），跑步不變（捲毛追逐的平衡）
          ((G.boostT || 0) > 0 ? 1.45 : 1) * (ZHU.slow ? 0.7 : 1) * (1 - 0.48 * P.cr) * (G.broken ? (Math.sin(G.walk.phase) < 0 ? 1.05 : 0.4) : 1); // 骨折：好的那隻腳踩出去時往前挪，拖受傷那隻腳時幾乎不動（平均約六成速度）
       if (moving) {
@@ -1574,13 +1651,11 @@
     if (enemyMesh && enemyMesh.visible) {
       const st = enemy.stun > 0; const bob = enemy.moving ? Math.abs(Math.sin(performance.now() / (enemy.state === 'chase' ? 90 : 160))) * 0.06 : 0;
       enemyMesh.position.set(enemy.x + (st ? Math.sin(performance.now() / 70) * 0.04 : 0), enemy.y + (enemyMesh.isSkinnedMesh ? 0 : bob), enemy.z);
-      if (enemyMesh.isSkinnedMesh) { /* 骨架動作：看到玩家＝伸手衝刺、巡查＝垂手搖晃走、其他＝站著；步伐相位跟著實際移動距離走，腳才不會滑 */
+      if (enemyMesh.isSkinnedMesh) { /* 骨架動作：腳步依實際速度（走→跑），上半身看到玩家＝伸手衝刺、沒看到＝垂手搖晃巡查 */
         const A2 = enemyMesh.userData, mvd = A2.lx === undefined ? 0 : Math.hypot(enemy.x - A2.lx, enemy.z - A2.lz); A2.lx = enemy.x; A2.lz = enemy.z;
-        A2.seeT = enemy.sees && enemy.state === 'chase' ? 1.2 : Math.max(0, (A2.seeT || 0) - dt); const fast = A2.seeT > 0; /* 只有真的看到玩家才伸手衝刺，其他時候是垂手搖晃的巡查走路 */
-        const tr = (!st && enemy.moving && fast && !G.bedScene) ? 1 : 0, tw = (!st && enemy.moving && !fast && !G.bedScene) ? 1 : 0, k = Math.min(1, dt * 6);
-        A2.run = (A2.run || 0) + (tr - (A2.run || 0)) * k; A2.walk = (A2.walk || 0) + (tw - (A2.walk || 0)) * k;
-        A2.ph = ((A2.ph || 0) + Math.min(mvd, 0.5) * Math.PI * 2 / (A2.run > A2.walk ? 2.3 : 1.35)) % (Math.PI * 200);
-        A2.t = (A2.t || 0) + dt; kemaoPose(enemyMesh, A2.ph, A2.run, A2.walk, A2.t);
+        const v = mvd > 1 ? 0 : mvd / Math.max(dt, 1e-3); A2.vs = (A2.vs || 0) + (v - (A2.vs || 0)) * Math.min(1, dt * 10);
+        A2.seeT = enemy.sees && enemy.state === 'chase' ? 1.2 : Math.max(0, (A2.seeT || 0) - dt);
+        kemaoAnim(enemyMesh, dt, { speed: enemy.moving ? A2.vs : 0, sees: A2.seeT > 0, yaw: enemy.yaw, still: st || G.bedScene });
       }
       enemyMesh.rotation.z = st ? Math.sin(performance.now() / 130) * 0.22 : (G.peekTilt || 0);
       enemyMesh.rotation.y = (G.bedScene || G.phase === 'dead') ? Math.atan2(camera.position.x - enemyMesh.position.x, camera.position.z - enemyMesh.position.z) : enemy.yaw; /* 3D 模型：平常朝他走的方向，抓人時看著玩家 */

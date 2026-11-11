@@ -298,6 +298,21 @@
     if (tint) { m.color = new THREE.Color(tint); m.specular = new THREE.Color(0x050505); m.shininess = 3; }
     const mesh = new THREE.Mesh(g, m); mesh.userData.w = w; scene.add(mesh); return mesh;
   }
+  // 捲毛 3D 模型（Tripo 模型簡化後的網格：int16 位置、uint16 UV、uint16 索引、int8 法線）
+  function kemaoModel(geoB64, tex, emissive, tint) {
+    const s = atob(geoB64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+    const dv = new DataView(u.buffer), nv = dv.getUint32(0, true), nt = dv.getUint32(4, true); let o = 8;
+    const P = new Int16Array(u.buffer, o, nv * 3); o += nv * 6; const U = new Uint16Array(u.buffer, o, nv * 2); o += nv * 4; const I = new Uint16Array(u.buffer, o, nt * 3); o += nt * 6; const N = new Int8Array(u.buffer, o, nv * 3);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(P, (x) => x / 16384), 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(U, (x) => x / 65535), 2));
+    g.setAttribute('normal', new THREE.BufferAttribute(Float32Array.from(N, (x) => x / 127), 3));
+    g.setIndex(new THREE.BufferAttribute(new Uint16Array(I), 1)); g.computeBoundingSphere();
+    tex.flipY = false; tex.needsUpdate = true;
+    const m = new THREE.MeshPhongMaterial({ map: tex, color: new THREE.Color(tint), specular: 0x050505, shininess: 4 });
+    if (emissive) { m.emissive = new THREE.Color(emissive); m.emissiveMap = tex; }
+    const mesh = new THREE.Mesh(g, m); mesh.userData.model = true; scene.add(mesh); return mesh;
+  }
   const ERUN = { frames: null, geo: null, still: null, cur: -1 }; let ENEMY_EMI = 0, npcMesh, enemyMesh, wheyMesh, potMesh, stunMesh, houMesh, panMesh; const TEX = {}, BAGS = [];
   const HOU = DORM.hou;
   // 電視：螢幕（自發光）、雜訊畫面、照到交誼廳的螢幕光
@@ -308,17 +323,15 @@
     const nc = document.createElement('canvas'); nc.width = 160; nc.height = 90; TV.noiseCanvas = nc; TV.noise = new THREE.CanvasTexture(nc);
     TV.light = new THREE.SpotLight(0x9fb4d8, 0, 10, 1.15, 1, 2); TV.light.position.set(t.x + t.nx * 0.15, t.y, t.z + t.nz * 0.15); TV.light.target.position.set(t.x + t.nx * 7, 3.6, t.z + t.nz * 7); scene.add(TV.light); scene.add(TV.light.target);
   }
-  const ready = Promise.all([loadTex(A.p1), loadTex(A.p2), loadTex(A.whey), loadTex(A.pot), loadTex(A.tv1), loadTex(A.tv2), loadTex(A.tv3), loadTex(A.tv4), loadTex(A.remote), loadTex(A.hou), loadTex(A.bags2), loadTex(A.bag1), loadTex(A.card)]).then(([t1, t2, tw, tp, v1, v2, v3, v4, rm, th, tb2, tb1, tc]) => {
+  const ready = Promise.all([loadTex(A.p1), loadTex(A.p2), loadTex(A.whey), loadTex(A.pot), loadTex(A.tv1), loadTex(A.tv2), loadTex(A.tv3), loadTex(A.tv4), loadTex(A.remote), loadTex(A.hou), loadTex(A.bags2), loadTex(A.bag1), loadTex(A.card), loadTex(A.kemao_npc_tex), loadTex(A.kemao_chase_tex)]).then(([t1, t2, tw, tp, v1, v2, v3, v4, rm, th, tb2, tb1, tc, tkn, tkc]) => {
     TV.tex = [v1, v2, v3, v4]; TEX.whey = tw; TEX.pot = tp; TEX.remote = rm; TEX.card = tc; loadTex(A.key).then((t) => { TEX.key = t; });
     // 208 號房：受傷的侯宸宇（躺在靠窗左側地上）、乳清旁的垃圾袋
     houMesh = billboard(th, 0.56, 0x050505, 0x8a8a8a); houMesh.position.set(HOU.x, HOU.y, HOU.z);
     for (const [ti, x, z, h] of DORM.bags) { const tx = ti ? tb1 : tb2; const m = billboard(tx, h, 0x050505); m.position.set(x, DORM.F + 0.01, z); BAGS.push(m); world.dyn.push({ n: 'bag', x0: x - 0.22, x1: x + 0.22, z0: z - 0.22, z1: z + 0.22, y0: 3.35, y1: 3.35 + h * 0.85 }); }
     { const r = LNG.remote; const w = 0.06, h = w * rm.image.height / rm.image.width; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a,  map: rm, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x111111, emissiveMap: rm }));
       m.rotation.x = -Math.PI / 2; m.rotation.z = 0.5; m.position.set(r.x, r.y + 0.018, r.z); scene.add(m); TV.remoteMesh = m; }
-    npcMesh = billboard(t1, 1.78, 0x050505, 0x8a8a8a);
-    enemyMesh = billboard(t2, 1.9, 0x2a0606, 0x9a8e8e); ENEMY_EMI = enemyMesh.material.emissive.getHex(); enemyMesh.visible = false;
-    ERUN.still = { map: t2, geo: enemyMesh.geometry };
-    Promise.all([1, 2, 3, 4, 5].map((k) => loadTex(A['kemao_run' + k]))).then((ts) => { ERUN.frames = ts; const h = 1.9, w = h * ts[0].image.width / ts[0].image.height; ERUN.geo = new THREE.PlaneGeometry(w, h); ERUN.geo.translate(0, h / 2, 0); }); // 追逐時的跑步動圖（5 張）
+    npcMesh = kemaoModel(A.kemao_npc_geo, tkn, 0x050505, 0x9a9a9a); /* 一般型態：夾克、手插口袋 */
+    enemyMesh = kemaoModel(A.kemao_chase_geo, tkc, 0x2a0606, 0xa09494); ENEMY_EMI = enemyMesh.material.emissive.getHex(); enemyMesh.visible = false; /* 追逐型態：背心、張開雙手 */
     wheyMesh = billboard(tw, 0.3, 0x15110a);
     potMesh = billboard(tp, 0.26, 0x0e0e0e);
     const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d'); g.font = '900 40px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.fillStyle = '#ffd25a'; g.fillText('✶ 暈 眩 ✶', 128, 46);
@@ -1491,6 +1504,7 @@
       const st = enemy.stun > 0; const bob = enemy.moving ? Math.abs(Math.sin(performance.now() / (enemy.state === 'chase' ? 90 : 160))) * 0.06 : 0;
       enemyMesh.position.set(enemy.x + (st ? Math.sin(performance.now() / 70) * 0.04 : 0), enemy.y + bob, enemy.z);
       enemyMesh.rotation.z = st ? Math.sin(performance.now() / 130) * 0.22 : (G.peekTilt || 0);
+      enemyMesh.rotation.y = (G.bedScene || G.phase === 'dead') ? Math.atan2(camera.position.x - enemyMesh.position.x, camera.position.z - enemyMesh.position.z) : enemy.yaw; /* 3D 模型：平常朝他走的方向，抓人時看著玩家 */
       if (ERUN.frames) { // 追著跑的時候換成跑步動圖，其他時候（站著、走路搜尋、暈眩）是原本那張
         const run = !st && enemy.moving && (enemy.state === 'chase' || enemy.state === 'hunt') && !G.bedScene;
         const f = run ? Math.floor(performance.now() / 85) % 5 : -1;
@@ -1585,7 +1599,7 @@
     }
     // Billboard 面向鏡頭（只轉 Y 軸）
     const cx = camera.position.x, cz = camera.position.z;
-    for (const m of [npcMesh, enemyMesh, wheyMesh, potMesh, houMesh, panMesh, ...BAGS, ...(ZHU.meshes || [])]) if (m && m.visible) m.rotation.y = Math.atan2(cx - m.position.x, cz - m.position.z);
+    for (const m of [npcMesh, wheyMesh, potMesh, houMesh, panMesh, ...BAGS, ...(ZHU.meshes || [])]) if (m && m.visible) m.rotation.y = Math.atan2(cx - m.position.x, cz - m.position.z);
     for (const dr of DROPS) if (dr.mesh && dr.mesh.userData.drop) dr.mesh.rotation.y = Math.atan2(cx - dr.mesh.position.x, cz - dr.mesh.position.z);
     // 手上道具晃動
     ui.hand.style.visibility = P.hidden ? 'hidden' : '';

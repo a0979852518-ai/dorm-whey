@@ -299,7 +299,7 @@
     const mesh = new THREE.Mesh(g, m); mesh.userData.w = w; scene.add(mesh); return mesh;
   }
   // 捲毛 3D 模型（Tripo 模型簡化後的網格：int16 位置、uint16 UV、uint16 索引、int8 法線）
-  function kemaoModel(geoB64, tex, emissive, tint) {
+  function kemaoModel(geoB64, tex, emissive, tint, skinned) {
     const s = atob(geoB64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
     const dv = new DataView(u.buffer), nv = dv.getUint32(0, true), nt = dv.getUint32(4, true); let o = 8;
     const P = new Int16Array(u.buffer, o, nv * 3); o += nv * 6; const U = new Uint16Array(u.buffer, o, nv * 2); o += nv * 4; const I = new Uint16Array(u.buffer, o, nt * 3); o += nt * 6; const N = new Int8Array(u.buffer, o, nv * 3);
@@ -311,7 +311,49 @@
     tex.flipY = false; tex.needsUpdate = true;
     const m = new THREE.MeshPhongMaterial({ map: tex, color: new THREE.Color(tint), specular: 0x050505, shininess: 4 });
     if (emissive) { m.emissive = new THREE.Color(emissive); m.emissiveMap = tex; }
-    const mesh = new THREE.Mesh(g, m); mesh.userData.model = true; scene.add(mesh); return mesh;
+    let mesh = new THREE.Mesh(g, m); mesh.userData.model = true;
+    if (skinned) mesh = kemaoSkin(mesh, u.subarray(o + nv * 3));
+    scene.add(mesh); return mesh;
+  }
+  // 追逐型態捲毛的骨架：19 根骨頭（模型面向 +Z，左手 = +X），[父骨, x, y, z]
+  const KB = [[-1,0,0.95,-0.02],[0,0,1.12,-0.01],[1,0,1.3,-0.02],[2,0,1.52,-0.05],[3,0,1.62,-0.02],[2,0.06,1.45,-0.05],[5,0.19,1.45,-0.06],[6,0.46,1.43,-0.08],[7,0.72,1.39,-0.07],[2,-0.06,1.45,-0.05],[9,-0.19,1.45,-0.06],[10,-0.46,1.43,-0.08],[11,-0.72,1.39,-0.07],[0,0.09,0.9,-0.03],[13,0.09,0.5,-0.06],[14,0.1,0.09,-0.09],[0,-0.09,0.9,-0.03],[16,-0.09,0.5,-0.06],[17,-0.1,0.09,-0.09]];
+  function kemaoSkin(mesh, skinBytes) {
+    const nv = mesh.geometry.attributes.position.count;
+    mesh.geometry.setAttribute('skinIndex', new THREE.Uint8BufferAttribute(skinBytes.slice(0, nv * 4), 4));
+    mesh.geometry.setAttribute('skinWeight', new THREE.BufferAttribute(Float32Array.from(skinBytes.slice(nv * 4, nv * 8), (v) => v / 255), 4));
+    const bones = KB.map(([p, x, y, z]) => { const b = new THREE.Bone(); b.userData.rest = new THREE.Vector3(x, y, z); return b; });
+    KB.forEach(([p], i) => { const r = bones[i].userData.rest; if (p < 0) bones[i].position.copy(r); else { bones[i].position.copy(r).sub(bones[p].userData.rest); bones[p].add(bones[i]); } });
+    const sm = new THREE.SkinnedMesh(mesh.geometry, mesh.material); sm.material.skinning = true; sm.userData.model = true;
+    sm.add(bones[0]); sm.updateMatrixWorld(true); sm.bind(new THREE.Skeleton(bones)); sm.frustumCulled = false;
+    sm.userData.bones = bones; sm.userData.hipY = bones[0].position.y;
+    return sm;
+  }
+  // 動作：run 0~1 = 站著→全力衝刺，walk 0~1 = 走路，ph = 步伐相位（弧度）
+  const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _e = new THREE.Euler();
+  function kemaoPose(sm, ph, run, walk, t) {
+    const b = sm.userData.bones, R = (i, x, y, z, order) => { _e.set(x, y, z, order || 'XYZ'); b[i].quaternion.setFromEuler(_e); };
+    const s = Math.sin(ph), c = Math.cos(ph), mv = Math.max(run, walk);
+    const amp = 0.38 * walk + 0.78 * run;                  /* 腿擺幅 */
+    const lean = 0.05 * walk + 0.32 * run;                  /* 身體前傾 */
+    const breath = Math.sin(t * 1.7) * 0.012 * (1 - mv);
+    b[0].position.y = sm.userData.hipY - 0.07 * run + (0.025 * walk + 0.06 * run) * Math.abs(Math.sin(ph)) - 0.03 * run;
+    R(0, lean * 0.5, s * 0.18 * mv, 0);
+    R(1, lean * 0.3 + breath, -s * 0.12 * mv, 0);
+    R(2, lean * 0.2 - breath, -s * 0.16 * mv, 0);
+    R(3, -lean * 0.6, s * 0.08 * mv, 0);
+    R(4, -lean * 0.3 + 0.05 * run * Math.sin(ph * 2), 0, Math.sin(t * 0.6) * 0.04 * (1 - mv) + 0.06 * run);   /* 頭微歪、盯著前面 */
+    /* 手：從 T 字放下來，跑步時大幅前後擺、手肘彎 */
+    const down = 1.2 + 0.05 * (1 - mv), sw = (0.35 * walk + 1.0 * run) * s;
+    const elb = 0.15 + 0.2 * walk + 1.35 * run;
+    _qa.setFromEuler(_e.set(0, 0, -down)); _qb.setFromEuler(_e.set(sw, 0, 0)); b[6].quaternion.copy(_qb).multiply(_qa);
+    _qa.setFromEuler(_e.set(0, 0, down)); _qb.setFromEuler(_e.set(-sw, 0, 0)); b[10].quaternion.copy(_qb).multiply(_qa);
+    R(7, 0, -elb - 0.25 * run * Math.max(0, -s), 0); R(11, 0, elb + 0.25 * run * Math.max(0, s), 0);
+    R(8, 0, 0, -0.1); R(12, 0, 0, 0.1); R(5, 0, 0, -0.08 * run * c); R(9, 0, 0, -0.08 * run * c);
+    /* 腳：大腿前後擺（反向於手），膝蓋在後擺時彎得很深 */
+    const kL = 0.12 * mv + (0.55 * walk + 1.55 * run) * Math.max(0, -Math.sin(ph - 0.9)), kR = 0.12 * mv + (0.55 * walk + 1.55 * run) * Math.max(0, Math.sin(ph - 0.9));
+    R(13, -amp * s - lean * 0.6, 0, 0.03); R(16, amp * s - lean * 0.6, 0, -0.03);
+    R(14, kL, 0, 0); R(17, kR, 0, 0);
+    R(15, -0.3 * run * Math.max(0, s) + 0.15 * walk * s, 0, 0); R(18, -0.3 * run * Math.max(0, -s) - 0.15 * walk * s, 0, 0);
   }
   const ERUN = { frames: null, geo: null, still: null, cur: -1 }; let ENEMY_EMI = 0, npcMesh, enemyMesh, wheyMesh, potMesh, stunMesh, houMesh, panMesh; const TEX = {}, BAGS = [];
   const HOU = DORM.hou;
@@ -331,7 +373,7 @@
     { const r = LNG.remote; const w = 0.06, h = w * rm.image.height / rm.image.width; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshPhongMaterial({ shininess: 6, specular: 0x0a0a0a,  map: rm, alphaTest: 0.4, side: THREE.DoubleSide, emissive: 0x111111, emissiveMap: rm }));
       m.rotation.x = -Math.PI / 2; m.rotation.z = 0.5; m.position.set(r.x, r.y + 0.018, r.z); scene.add(m); TV.remoteMesh = m; }
     npcMesh = kemaoModel(A.kemao_npc_geo, tkn, 0x050505, 0x9a9a9a); /* 一般型態：夾克、手插口袋 */
-    enemyMesh = kemaoModel(A.kemao_chase_geo, tkc, 0x2a0606, 0xa09494); ENEMY_EMI = enemyMesh.material.emissive.getHex(); enemyMesh.visible = false; /* 追逐型態：背心、張開雙手 */
+    enemyMesh = kemaoModel(A.kemao_chase_geo, tkc, 0x2a0606, 0xa09494, true); ENEMY_EMI = enemyMesh.material.emissive.getHex(); enemyMesh.visible = false; /* 追逐型態：背心、張開雙手 */
     wheyMesh = billboard(tw, 0.3, 0x15110a);
     potMesh = billboard(tp, 0.26, 0x0e0e0e);
     const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d'); g.font = '900 40px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.fillStyle = '#ffd25a'; g.fillText('✶ 暈 眩 ✶', 128, 46);
@@ -1502,7 +1544,15 @@
     // 敵人呈現
     if (enemyMesh && enemyMesh.visible) {
       const st = enemy.stun > 0; const bob = enemy.moving ? Math.abs(Math.sin(performance.now() / (enemy.state === 'chase' ? 90 : 160))) * 0.06 : 0;
-      enemyMesh.position.set(enemy.x + (st ? Math.sin(performance.now() / 70) * 0.04 : 0), enemy.y + bob, enemy.z);
+      enemyMesh.position.set(enemy.x + (st ? Math.sin(performance.now() / 70) * 0.04 : 0), enemy.y + (enemyMesh.isSkinnedMesh ? 0 : bob), enemy.z);
+      if (enemyMesh.isSkinnedMesh) { /* 骨架動作：追人＝衝刺、搜尋＝走路、其他＝站著；步伐相位跟著實際移動距離走，腳才不會滑 */
+        const A2 = enemyMesh.userData, mvd = A2.lx === undefined ? 0 : Math.hypot(enemy.x - A2.lx, enemy.z - A2.lz); A2.lx = enemy.x; A2.lz = enemy.z;
+        const fast = enemy.state === 'chase' || enemy.state === 'hunt' || enemy.state === 'rush';
+        const tr = (!st && enemy.moving && fast && !G.bedScene) ? 1 : 0, tw = (!st && enemy.moving && !fast && !G.bedScene) ? 1 : 0, k = Math.min(1, dt * 6);
+        A2.run = (A2.run || 0) + (tr - (A2.run || 0)) * k; A2.walk = (A2.walk || 0) + (tw - (A2.walk || 0)) * k;
+        A2.ph = ((A2.ph || 0) + Math.min(mvd, 0.5) * Math.PI * 2 / (A2.run > A2.walk ? 2.3 : 1.35)) % (Math.PI * 200);
+        A2.t = (A2.t || 0) + dt; kemaoPose(enemyMesh, A2.ph, A2.run, A2.walk, A2.t);
+      }
       enemyMesh.rotation.z = st ? Math.sin(performance.now() / 130) * 0.22 : (G.peekTilt || 0);
       enemyMesh.rotation.y = (G.bedScene || G.phase === 'dead') ? Math.atan2(camera.position.x - enemyMesh.position.x, camera.position.z - enemyMesh.position.z) : enemy.yaw; /* 3D 模型：平常朝他走的方向，抓人時看著玩家 */
       if (ERUN.frames) { // 追著跑的時候換成跑步動圖，其他時候（站著、走路搜尋、暈眩）是原本那張

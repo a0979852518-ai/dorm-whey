@@ -340,15 +340,44 @@
     R(0, lean * 0.5, s * 0.18 * mv, 0);
     R(1, lean * 0.3 + breath, -s * 0.12 * mv, 0);
     R(2, lean * 0.2 - breath, -s * 0.16 * mv, 0);
-    R(3, -lean * 0.6, s * 0.08 * mv, 0);
-    R(4, -lean * 0.3 + 0.05 * run * Math.sin(ph * 2), 0, Math.sin(t * 0.6) * 0.04 * (1 - mv) + 0.06 * run);   /* 頭微歪、盯著前面 */
+    /* 扭曲：脊椎 S 形側彎、脖子往前伸、頭歪一邊並不規則抽動 */
+    const tw = Math.sin(t * 23) * Math.max(0, Math.sin(t * 2.3)) + 0.5 * Math.sin(t * 37) * Math.max(0, Math.sin(t * 1.3 + 2));
+    b[1].quaternion.multiply(_qa.setFromEuler(_e.set(0, 0, 0.16 * run)));
+    b[2].quaternion.multiply(_qa.setFromEuler(_e.set(0, 0, -0.12 * run)));
+    R(3, -lean * 0.6 + 0.3 * run, s * 0.08 * mv, 0.12 * run);
+    R(4, -lean * 0.3 - 0.68 * run + 0.05 * run * Math.sin(ph * 2) + 0.06 * run * tw, 0.1 * run * tw, Math.sin(t * 0.6) * 0.04 * (1 - mv) + 0.42 * run + 0.14 * run * tw);   /* 頭歪一邊、仰著盯玩家 */
     /* 手：從 T 字放下來，跑步時大幅前後擺、手肘彎 */
     const down = 1.2 + 0.05 * (1 - mv), sw = (0.35 * walk + 1.0 * run) * s;
     const elb = 0.15 + 0.2 * walk + 1.35 * run;
     _qa.setFromEuler(_e.set(0, 0, -down)); _qb.setFromEuler(_e.set(sw, 0, 0)); b[6].quaternion.copy(_qb).multiply(_qa);
     _qa.setFromEuler(_e.set(0, 0, down)); _qb.setFromEuler(_e.set(-sw, 0, 0)); b[10].quaternion.copy(_qb).multiply(_qa);
     R(7, 0, -elb - 0.25 * run * Math.max(0, -s), 0); R(11, 0, elb + 0.25 * run * Math.max(0, s), 0);
-    R(8, 0, 0, -0.1); R(12, 0, 0, 0.1); R(5, 0, 0, -0.08 * run * c); R(9, 0, 0, -0.08 * run * c);
+    R(8, 0, 0, -0.1); R(12, 0, 0, 0.1);
+    if (walk > 0.001) { /* 巡查：雙手無力垂著像鐘擺晃、身體左右搖、頭跟著甩、步伐一長一短 */
+      const sw2 = Math.sin(ph - 0.7), roll = Math.sin(ph);
+      const aL = _qb.setFromEuler(_e.set(0.28 * sw2 + 0.06, 0, 0)).multiply(_qa.setFromEuler(_e.set(0, 0, -1.48 - 0.08 * roll)));
+      b[6].quaternion.slerp(aL, walk);
+      const aR = _qb.setFromEuler(_e.set(-0.28 * sw2 + 0.06, 0, 0)).multiply(_qa.setFromEuler(_e.set(0, 0, 1.48 - 0.08 * roll)));
+      b[10].quaternion.slerp(aR, walk);
+      b[7].quaternion.slerp(_qa.setFromEuler(_e.set(0, -0.12 - 0.1 * Math.max(0, sw2), 0)), walk); b[11].quaternion.slerp(_qa.setFromEuler(_e.set(0, 0.12 + 0.1 * Math.max(0, -sw2), 0)), walk);
+      b[8].quaternion.slerp(_qa.setFromEuler(_e.set(0, 0, -0.25)), walk); b[12].quaternion.slerp(_qa.setFromEuler(_e.set(0, 0, 0.25)), walk);
+      b[0].quaternion.multiply(_qa.setFromEuler(_e.set(0, 0, 0.1 * walk * roll)));
+      b[0].position.x = 0.035 * walk * roll;
+      b[1].quaternion.multiply(_qa.setFromEuler(_e.set(0.06 * walk, 0, -0.07 * walk * roll)));
+      b[2].quaternion.multiply(_qa.setFromEuler(_e.set(0.12 * walk, 0, -0.06 * walk * roll)));
+      b[3].quaternion.multiply(_qa.setFromEuler(_e.set(0.15 * walk, 0, 0)));
+      b[4].quaternion.multiply(_qa.setFromEuler(_e.set(0.12 * walk, 0.08 * walk * Math.sin(ph * 0.5), walk * (0.2 + 0.16 * Math.sin(ph - 1.1)))));
+      b[13].quaternion.multiply(_qa.setFromEuler(_e.set(-0.1 * walk * Math.sin(ph), 0, 0)));   /* 左腳步子大、右腳拖著 */
+      b[17].quaternion.multiply(_qa.setFromEuler(_e.set(-0.15 * walk * Math.max(0, Math.sin(ph - 0.9)), 0, 0)));
+    } else b[0].position.x = 0;
+    if (run > 0.001) { /* 追人：雙手向前伸直，一高一低、跟著步伐上下晃、偶爾抽一下 */
+      const qL = _qb.setFromEuler(_e.set(-0.42 + 0.1 * s + 0.08 * tw, 0, 0)).multiply(_qa.setFromEuler(_e.set(0, -1.42, 0)));
+      b[6].quaternion.slerp(qL, run);
+      const qR = _qb.setFromEuler(_e.set(-0.58 - 0.1 * s - 0.06 * tw, 0, 0)).multiply(_qa.setFromEuler(_e.set(0, 1.38, 0)));
+      b[10].quaternion.slerp(qR, run);
+      b[7].quaternion.slerp(_qa.setFromEuler(_e.set(0, 0.06, -0.08)), run); b[11].quaternion.slerp(_qa.setFromEuler(_e.set(0, -0.06, 0.12)), run);
+      b[8].quaternion.slerp(_qa.setFromEuler(_e.set(0.3, 0, -0.35)), run); b[12].quaternion.slerp(_qa.setFromEuler(_e.set(0.3, 0, 0.35)), run);
+    } R(5, 0, -0.25 * run, 0.22 * run - 0.08 * run * c); R(9, 0, 0.18 * run, -0.12 * run - 0.08 * run * c); /* 聳肩、往前探 */
     /* 腳：大腿前後擺（反向於手），膝蓋在後擺時彎得很深 */
     const kL = 0.12 * mv + (0.55 * walk + 1.55 * run) * Math.max(0, -Math.sin(ph - 0.9)), kR = 0.12 * mv + (0.55 * walk + 1.55 * run) * Math.max(0, Math.sin(ph - 0.9));
     R(13, -amp * s - lean * 0.6, 0, 0.03); R(16, amp * s - lean * 0.6, 0, -0.03);
@@ -1545,9 +1574,9 @@
     if (enemyMesh && enemyMesh.visible) {
       const st = enemy.stun > 0; const bob = enemy.moving ? Math.abs(Math.sin(performance.now() / (enemy.state === 'chase' ? 90 : 160))) * 0.06 : 0;
       enemyMesh.position.set(enemy.x + (st ? Math.sin(performance.now() / 70) * 0.04 : 0), enemy.y + (enemyMesh.isSkinnedMesh ? 0 : bob), enemy.z);
-      if (enemyMesh.isSkinnedMesh) { /* 骨架動作：追人＝衝刺、搜尋＝走路、其他＝站著；步伐相位跟著實際移動距離走，腳才不會滑 */
+      if (enemyMesh.isSkinnedMesh) { /* 骨架動作：看到玩家＝伸手衝刺、巡查＝垂手搖晃走、其他＝站著；步伐相位跟著實際移動距離走，腳才不會滑 */
         const A2 = enemyMesh.userData, mvd = A2.lx === undefined ? 0 : Math.hypot(enemy.x - A2.lx, enemy.z - A2.lz); A2.lx = enemy.x; A2.lz = enemy.z;
-        const fast = enemy.state === 'chase' || enemy.state === 'hunt' || enemy.state === 'rush';
+        A2.seeT = enemy.sees && enemy.state === 'chase' ? 1.2 : Math.max(0, (A2.seeT || 0) - dt); const fast = A2.seeT > 0; /* 只有真的看到玩家才伸手衝刺，其他時候是垂手搖晃的巡查走路 */
         const tr = (!st && enemy.moving && fast && !G.bedScene) ? 1 : 0, tw = (!st && enemy.moving && !fast && !G.bedScene) ? 1 : 0, k = Math.min(1, dt * 6);
         A2.run = (A2.run || 0) + (tr - (A2.run || 0)) * k; A2.walk = (A2.walk || 0) + (tw - (A2.walk || 0)) * k;
         A2.ph = ((A2.ph || 0) + Math.min(mvd, 0.5) * Math.PI * 2 / (A2.run > A2.walk ? 2.3 : 1.35)) % (Math.PI * 200);
